@@ -1,0 +1,19 @@
+{
+  "id": "io-auto-mode",
+  "name": "Io Auto Mode",
+  "description": "Hybrid static + LLM exec security classifier.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "mode": { "type": "string", "enum": ["classify", "yolo", "strict"], "default": "classify" },
+      "stage1Model": { "type": "string", "default": "google/gemini-3-flash-preview" },
+      "stage1Fallback": { "type": "string", "default": "anthropic/claude-haiku-3-5" },
+      "stage2Model": { "type": "string", "default": "anthropic/claude-sonnet-4-6" },
+      "stage2Fallback": { "type": "string", "default": "google/gemini-3-flash-preview" },
+      "userAllowPatterns": { "type": "array", "items": { "type": "string" }, "default": [] },
+      "userBlockPatterns": { "type": "array", "items": { "type": "string" }, "default": [] }
+    }
+  }
+}

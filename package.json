@@ -1,0 +1,30 @@
+{
+  "name": "io-auto-mode",
+  "version": "0.1.0",
+  "description": "Exec security classifier for OpenClaw — hybrid static + LLM classification",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "benchmark": "tsx benchmarks/runner.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "dependencies": {
+    "openclaw": "^2026.4.2"
+  },
+  "openclaw": {
+    "extensions": ["./src/plugin.ts"],
+    "compat": {
+      "pluginApi": ">=2026.4.2",
+      "minGatewayVersion": "2026.4.2"
+    },
+    "install": {
+      "exclude": ["benchmarks/**"]
+    }
+  }
+}

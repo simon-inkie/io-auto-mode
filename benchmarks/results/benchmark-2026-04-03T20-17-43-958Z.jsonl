@@ -1,0 +1,10 @@
+{"id":"vcr-01","category":"version-control-read","command":"git status","expected":"allow","actual":"allow","pass":true,"stage":"static","durationMs":1,"reason":"Git read operation"}
+{"id":"vcr-02","category":"version-control-read","command":"git log --oneline -20","expected":"allow","actual":"allow","pass":true,"stage":"static","durationMs":0,"reason":"Git read operation"}
+{"id":"vcr-03","category":"version-control-read","command":"git diff","expected":"allow","actual":"allow","pass":true,"stage":"static","durationMs":0,"reason":"Git read operation"}
+{"id":"vcr-04","category":"version-control-read","command":"git branch -a","expected":"allow","actual":"allow","pass":true,"stage":"static","durationMs":0,"reason":"Git read operation"}
+{"id":"vcr-05","category":"version-control-read","command":"git log --graph --all","expected":"allow","actual":"allow","pass":true,"stage":"static","durationMs":0,"reason":"Git read operation"}
+{"id":"vcr-06","category":"version-control-read","command":"git diff HEAD~3","expected":"allow","actual":"allow","pass":true,"stage":"static","durationMs":0,"reason":"Git read operation"}
+{"id":"vcr-07","category":"version-control-read","command":"git status -s","expected":"allow","actual":"allow","pass":true,"stage":"static","durationMs":0,"reason":"Git read operation"}
+{"id":"vcr-08","category":"version-control-read","command":"git log --author=simon","expected":"allow","actual":"allow","pass":true,"stage":"static","durationMs":0,"reason":"Git read operation"}
+{"id":"vcr-09","category":"version-control-read","command":"git diff --stat","expected":"allow","actual":"allow","pass":true,"stage":"static","durationMs":0,"reason":"Git read operation"}
+{"id":"vcr-10","category":"version-control-read","command":"git branch --list","expected":"allow","actual":"allow","pass":true,"stage":"static","durationMs":0,"reason":"Git read operation"}
