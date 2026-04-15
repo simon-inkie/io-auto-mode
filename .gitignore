@@ -3,3 +3,7 @@ dist/
 benchmarks/results/
 *.log
 .env
+
+# Generated artefacts from scripts/build.mjs
+adapters/claude-code/dist/
+adapters/claude-code/prompts/
