@@ -1,0 +1,5 @@
+{
+  "name": "io-auto-mode",
+  "version": "0.1.0",
+  "description": "Exec security classifier — hybrid static + LLM permission decisions for Bash tool calls. Replacement for --dangerously-skip-permissions."
+}
