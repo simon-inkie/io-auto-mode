@@ -12,8 +12,8 @@
 import { readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
 import { resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { classify } from '../src/classifier.js';
-import { evaluateStatic } from '../src/static-patterns.js';
+import { classify } from '../core/classifier.js';
+import { evaluateStatic } from '../core/static-patterns.js';
 import type {
   BenchmarkFixture,
   BenchmarkResult,
@@ -21,8 +21,8 @@ import type {
   ModelCallFn,
   ModelCallOptions,
   Decision,
-} from '../src/types.js';
-import { DEFAULT_CONFIG } from '../src/types.js';
+} from '../core/types.js';
+import { DEFAULT_CONFIG } from '../core/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = resolve(__dirname, 'fixtures');

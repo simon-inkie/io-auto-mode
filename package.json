@@ -1,9 +1,8 @@
 {
   "name": "io-auto-mode",
   "version": "0.1.0",
-  "description": "Exec security classifier for OpenClaw — hybrid static + LLM classification",
+  "description": "Exec security classifier — hybrid static + LLM. Multi-platform: OpenClaw + Claude Code (WIP).",
   "type": "module",
-  "main": "src/index.ts",
   "scripts": {
     "benchmark": "tsx benchmarks/runner.ts",
     "typecheck": "tsc --noEmit",
@@ -16,15 +15,5 @@
   },
   "dependencies": {
     "openclaw": "^2026.4.2"
-  },
-  "openclaw": {
-    "extensions": ["./src/plugin.ts"],
-    "compat": {
-      "pluginApi": ">=2026.4.2",
-      "minGatewayVersion": "2026.4.2"
-    },
-    "install": {
-      "exclude": ["benchmarks/**"]
-    }
   }
 }

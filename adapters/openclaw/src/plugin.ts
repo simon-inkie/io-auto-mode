@@ -1,15 +1,15 @@
 import { definePluginEntry, type OpenClawPluginApi } from 'openclaw/plugin-sdk/plugin-entry';
-import { classify } from './classifier.js';
-import { logDecision } from './logger.js';
-import { serialiseTranscript } from './transcript.js';
+import { classify } from '../../../core/classifier.js';
+import { logDecision } from '../../../core/logger.js';
+import { serialiseTranscript } from '../../../core/transcript.js';
 import type {
   ClassifierConfig,
   ConversationMessage,
   ModelCallFn,
   ModelCallOptions,
-} from './types.js';
-import { DEFAULT_CONFIG } from './types.js';
-import { setLogPath } from './logger.js';
+} from '../../../core/types.js';
+import { DEFAULT_CONFIG } from '../../../core/types.js';
+import { setLogPath } from '../../../core/logger.js';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 

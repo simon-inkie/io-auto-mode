@@ -13,6 +13,6 @@
     "sourceMap": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*.ts", "benchmarks/**/*.ts"],
+  "include": ["core/**/*.ts", "adapters/**/*.ts", "benchmarks/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

@@ -1,0 +1,18 @@
+{
+  "name": "io-auto-mode-openclaw",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenClaw adapter for io-auto-mode — wraps the platform-agnostic classifier in a plugin entry.",
+  "type": "module",
+  "main": "src/index.ts",
+  "openclaw": {
+    "extensions": ["./src/plugin.ts"],
+    "compat": {
+      "pluginApi": ">=2026.4.2",
+      "minGatewayVersion": "2026.4.2"
+    },
+    "install": {
+      "exclude": ["benchmarks/**"]
+    }
+  }
+}

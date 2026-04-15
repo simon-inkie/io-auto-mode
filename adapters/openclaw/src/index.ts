@@ -5,10 +5,10 @@
  * using a hybrid static + LLM classifier.
  */
 
-export { classify } from './classifier.js';
-export { evaluateStatic, loadUserPatterns } from './static-patterns.js';
-export { serialiseTranscript, transcriptToJsonl, buildClassifierInput } from './transcript.js';
-export { logDecision, setLogPath } from './logger.js';
+export { classify } from '../../../core/classifier.js';
+export { evaluateStatic, loadUserPatterns } from '../../../core/static-patterns.js';
+export { serialiseTranscript, transcriptToJsonl, buildClassifierInput } from '../../../core/transcript.js';
+export { logDecision, setLogPath } from '../../../core/logger.js';
 export type {
   ClassifierDecision,
   ClassifierConfig,
@@ -22,8 +22,8 @@ export type {
   BenchmarkFixture,
   BenchmarkResult,
   LogEntry,
-} from './types.js';
-export { DEFAULT_CONFIG } from './types.js';
+} from '../../../core/types.js';
+export { DEFAULT_CONFIG } from '../../../core/types.js';
 
 // Plugin entry — default export for OpenClaw plugin loader
 export { default } from './plugin.js';
