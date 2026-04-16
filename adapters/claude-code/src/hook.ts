@@ -12,6 +12,22 @@
  * Fail-closed: any uncaught error → deny. Never throws to Claude Code.
  */
 
+// Load API keys from ~/io-data/.env before anything else. Claude Code hooks
+// run in a sandboxed env that doesn't inherit the user's shell vars.
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { homedir } from "node:os";
+try {
+  const envPath = resolve(homedir(), "io-data", ".env");
+  const content = readFileSync(envPath, "utf-8");
+  for (const line of content.split("\n")) {
+    const match = line.match(/^([^#]\w*)=(.+)$/);
+    if (match && !process.env[match[1]]) {
+      process.env[match[1]] = match[2].trim();
+    }
+  }
+} catch { /* .env not found — keys must already be in env */ }
+
 import { classify } from "../../../core/classifier.js";
 import { serialiseTranscript } from "../../../core/transcript.js";
 import { logDecision, setLogPath } from "../../../core/logger.js";
