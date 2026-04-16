@@ -35,23 +35,86 @@ const STATIC_BLOCK: Array<{ pattern: RegExp; reason: string }> = [
  * Only fires if command has NO shell chaining operators.
  */
 const STATIC_ALLOW: Array<{ pattern: RegExp; reason: string }> = [
-  { pattern: /^ls(\s+-[a-zA-Z]+)*\s*$/, reason: 'ls with flags only' },
+  // Filesystem reads
+  { pattern: /^ls\b/, reason: 'List directory' },
   { pattern: /^pwd\s*$/, reason: 'Print working directory' },
   { pattern: /^echo\s/, reason: 'Echo command' },
-  { pattern: /^git\s+(status|log|diff|branch)\b/, reason: 'Git read operation' },
-  { pattern: /^which\s/, reason: 'Which command lookup' },
-  { pattern: /^cat\s+(?!\/etc\/|~\/\.|\/home\/[^/]+\/\.)(?!.*[|;&])[^\s]+(\s+(?!\/etc\/|~\/\.|\/home\/[^/]+\/\.)[^\s|;&]+)*$/, reason: 'Cat without chaining (safe paths)' },
+  { pattern: /^cat\s+(?!\/etc\/|~\/\.|\/home\/[^/]+\/\.)/, reason: 'Cat (safe paths)' },
   { pattern: /^head\s/, reason: 'Head command' },
   { pattern: /^tail\s/, reason: 'Tail command' },
   { pattern: /^wc\s/, reason: 'Word count' },
-  { pattern: /^grep\s/, reason: 'Grep search' },
+  { pattern: /^less\s/, reason: 'Less pager' },
+  { pattern: /^file\s/, reason: 'File type check' },
+  { pattern: /^stat\s/, reason: 'File stat' },
+  { pattern: /^du\s/, reason: 'Disk usage' },
+  { pattern: /^df\s/, reason: 'Disk free' },
+  { pattern: /^readlink\s/, reason: 'Read symlink' },
+  { pattern: /^realpath\s/, reason: 'Resolve path' },
+  { pattern: /^which\s/, reason: 'Which command lookup' },
+  { pattern: /^type\s/, reason: 'Type command lookup' },
+
+  // Search
+  { pattern: /^grep\b/, reason: 'Grep search' },
   { pattern: /^rg\s/, reason: 'Ripgrep search' },
   { pattern: /^find\s+(?!.*(-exec|-delete|-ok))/, reason: 'Find without -exec/-delete' },
-  { pattern: /^openclaw\s+(--version|status|doctor|plugins)\b/, reason: 'OpenClaw read-only' },
-  { pattern: /^claude\s+--permission-mode\s+bypassPermissions\s+--print\s/, reason: 'Claude Code one-shot (Io tooling)' },
-  { pattern: /^pnpm\s+(typecheck|lint|benchmark|build)\b/, reason: 'pnpm dev scripts' },
-  { pattern: /^npm\s+(install|run|view)\b/, reason: 'npm install/run/view' },
-  { pattern: /^tsx\s+/, reason: 'TypeScript execution' },
+  { pattern: /^sed\s+-n\s/, reason: 'Sed print-only (no -i)' },
+  { pattern: /^awk\s/, reason: 'Awk (read-only by default)' },
+
+  // Git (read + common write operations)
+  { pattern: /^git\s+(status|log|diff|branch|show|blame|remote|tag|stash list|rev-parse|ls-files|ls-remote)\b/, reason: 'Git read operation' },
+  { pattern: /^git\s+(fetch|pull|checkout|switch|add|commit|merge|rebase|stash|cherry-pick)\b/, reason: 'Git standard write operation' },
+  { pattern: /^git\s+push\b(?!.*--force)/, reason: 'Git push (no --force)' },
+
+  // Directory ops
+  { pattern: /^mkdir\s/, reason: 'Create directory' },
+  { pattern: /^cd\s/, reason: 'Change directory' },
+  { pattern: /^touch\s/, reason: 'Touch file' },
+  { pattern: /^cp\s/, reason: 'Copy file' },
+  { pattern: /^mv\s/, reason: 'Move/rename file' },
+
+  // Dev tooling
+  { pattern: /^(pnpm|npm|yarn|bun)\s+(install|add|remove|run|exec|test|build|start|dev|typecheck|lint|benchmark|view|info|why|outdated|ls)\b/, reason: 'Package manager operation' },
+  { pattern: /^npx\s/, reason: 'npx execution' },
+  { pattern: /^tsx\s/, reason: 'TypeScript execution' },
+  { pattern: /^node\s/, reason: 'Node execution' },
+  { pattern: /^python[23]?\s/, reason: 'Python execution' },
+  { pattern: /^tsc\b/, reason: 'TypeScript compiler' },
+  { pattern: /^vitest\b/, reason: 'Vitest runner' },
+  { pattern: /^jest\b/, reason: 'Jest runner' },
+  { pattern: /^docker\s+(ps|images|logs|inspect|stats|exec|compose)\b/, reason: 'Docker read/run' },
+  { pattern: /^curl\s+(?!.*\|)/, reason: 'Curl without pipe' },
+
+  // Platform tools
+  { pattern: /^openclaw\s+(--version|status|doctor|plugins|hooks|gateway)\b/, reason: 'OpenClaw read-only' },
+  { pattern: /^claude\s/, reason: 'Claude CLI' },
+  { pattern: /^gh\s+(pr|issue|repo|api|run)\s/, reason: 'GitHub CLI' },
+  { pattern: /^supabase\s/, reason: 'Supabase CLI' },
+
+  // System info
+  { pattern: /^(uname|hostname|whoami|id|date|uptime|free|env|printenv|locale|lsb_release)\b/, reason: 'System info command' },
+  { pattern: /^ps\s/, reason: 'Process list' },
+  { pattern: /^(journalctl|systemctl\s+status)\b/, reason: 'Systemd read-only' },
+  { pattern: /^lsof\s/, reason: 'List open files' },
+  { pattern: /^ss\s/, reason: 'Socket stats' },
+
+  // Chmod (non-recursive, non-root)
+  { pattern: /^chmod\s+\+x\s/, reason: 'Make executable' },
+];
+
+/**
+ * Known-safe pipe suffixes and redirections. These are stripped from the
+ * command before checking ALLOW patterns, so `grep foo | head -5` is treated
+ * as just `grep foo` for pattern matching purposes.
+ */
+const SAFE_SUFFIXES = [
+  /\s*\|\s*(head|tail|wc|sort|uniq|tee|less|cat|tr|cut|column|jq|python3?\s+-c)\b[^|;`]*/g,
+  /\s*\|\s*grep\b[^|;`]*/g,
+  /\s*\|\s*sed\s+-n\b[^|;`]*/g,
+  /\s*\|\s*awk\b[^|;`]*/g,
+  /\s*2>\s*\/dev\/null/g,
+  /\s*2>&1/g,
+  /\s*\|\|\s*(echo|true|:)\b[^;`]*/g,
+  /\s*&&\s*(echo|true|:)\b[^;`]*/g,
 ];
 
 /** Characters/sequences that indicate shell chaining or redirection — disqualifies ALLOW */
@@ -90,18 +153,27 @@ export function evaluateStatic(command: string): ClassifierDecision | null {
     }
   }
 
-  // ALLOW patterns only fire if no shell chaining operators present
-  if (!SHELL_CHAIN_PATTERN.test(trimmed)) {
+  // Strip known-safe suffixes (| head, | grep, 2>/dev/null, || echo, etc.)
+  // before checking allow patterns. This lets `grep foo | head -5` match the
+  // `grep` allow pattern without being blocked by the shell-chain guard.
+  let stripped = trimmed;
+  for (const suffix of SAFE_SUFFIXES) {
+    stripped = stripped.replace(suffix, '');
+  }
+  stripped = stripped.trim();
+
+  // ALLOW patterns fire if the stripped command has no remaining shell operators
+  if (!SHELL_CHAIN_PATTERN.test(stripped)) {
     // Check hard-coded ALLOW patterns
     for (const { pattern, reason } of STATIC_ALLOW) {
-      if (pattern.test(trimmed)) {
+      if (pattern.test(stripped)) {
         return { decision: 'allow', reason, stage: 'static', durationMs: 0 };
       }
     }
 
     // Check user-configured ALLOW patterns
     for (const pattern of userAllowPatterns) {
-      if (pattern.test(trimmed)) {
+      if (pattern.test(stripped)) {
         return { decision: 'allow', reason: 'Matched user allow pattern', stage: 'static', durationMs: 0 };
       }
     }

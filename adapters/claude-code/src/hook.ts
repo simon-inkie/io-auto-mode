@@ -39,9 +39,6 @@ import type {
 } from "../../../core/types.js";
 import { readClaudeTranscript } from "./read-transcript.js";
 import { modelCall } from "./model-call.js";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { homedir } from "node:os";
 
 interface HookInput {
   session_id?: string;
