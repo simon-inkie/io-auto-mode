@@ -65,30 +65,25 @@ const STATIC_ALLOW: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /^git\s+(fetch|pull|checkout|switch|add|commit|merge|rebase|stash|cherry-pick)\b/, reason: 'Git standard write operation' },
   { pattern: /^git\s+push\b(?!.*--force)/, reason: 'Git push (no --force)' },
 
-  // Directory ops
+  // Directory ops — mkdir/cd/touch are safe; cp/mv go to LLM (can overwrite critical files)
   { pattern: /^mkdir\s/, reason: 'Create directory' },
   { pattern: /^cd\s/, reason: 'Change directory' },
   { pattern: /^touch\s/, reason: 'Touch file' },
-  { pattern: /^cp\s/, reason: 'Copy file' },
-  { pattern: /^mv\s/, reason: 'Move/rename file' },
 
-  // Dev tooling
+  // Dev tooling — only non-arbitrary-execution tools get static allow
   { pattern: /^(pnpm|npm|yarn|bun)\s+(install|add|remove|run|exec|test|build|start|dev|typecheck|lint|benchmark|view|info|why|outdated|ls)\b/, reason: 'Package manager operation' },
-  { pattern: /^npx\s/, reason: 'npx execution' },
-  { pattern: /^tsx\s/, reason: 'TypeScript execution' },
-  { pattern: /^node\s/, reason: 'Node execution' },
-  { pattern: /^python[23]?\s/, reason: 'Python execution' },
   { pattern: /^tsc\b/, reason: 'TypeScript compiler' },
   { pattern: /^vitest\b/, reason: 'Vitest runner' },
   { pattern: /^jest\b/, reason: 'Jest runner' },
-  { pattern: /^docker\s+(ps|images|logs|inspect|stats|exec|compose)\b/, reason: 'Docker read/run' },
-  { pattern: /^curl\s+(?!.*\|)/, reason: 'Curl without pipe' },
+  // node/python/npx/tsx are arbitrary code execution — go to LLM
+  { pattern: /^docker\s+(ps|images|logs|inspect|stats)\b/, reason: 'Docker read-only' },
+  // docker exec → LLM (arbitrary command in container)
+  // curl → LLM (can exfiltrate data via POST)
 
-  // Platform tools
+  // Platform tools — read-only subcommands only
   { pattern: /^openclaw\s+(--version|status|doctor|plugins|hooks|gateway)\b/, reason: 'OpenClaw read-only' },
-  { pattern: /^claude\s/, reason: 'Claude CLI' },
-  { pattern: /^gh\s+(pr|issue|repo|api|run)\s/, reason: 'GitHub CLI' },
-  { pattern: /^supabase\s/, reason: 'Supabase CLI' },
+  { pattern: /^gh\s+(pr|issue)\s+(view|list|status|checks)\b/, reason: 'GitHub CLI read-only' },
+  // gh api, supabase, claude CLI → LLM (can mutate state)
 
   // System info
   { pattern: /^(uname|hostname|whoami|id|date|uptime|free|env|printenv|locale|lsb_release)\b/, reason: 'System info command' },
