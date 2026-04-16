@@ -11,6 +11,17 @@
             "async": false
           }
         ]
+      },
+      {
+        "matcher": "Read|Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/classify-file.sh",
+            "timeout": 2,
+            "async": false
+          }
+        ]
       }
     ]
   }

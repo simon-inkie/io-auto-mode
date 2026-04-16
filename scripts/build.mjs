@@ -32,6 +32,7 @@ const EXTERNALS = [
 if (existsSync(DIST)) rmSync(DIST, { recursive: true });
 mkdirSync(DIST, { recursive: true });
 
+// Bash classifier (LLM-backed)
 await build({
   entryPoints: [join(CC_ROOT, "src/hook.ts")],
   outfile: join(DIST, "hook.js"),
@@ -44,12 +45,23 @@ await build({
   logLevel: "warning",
 });
 
+// File classifier (path-based, no LLM)
+await build({
+  entryPoints: [join(CC_ROOT, "src/file-hook.ts")],
+  outfile: join(DIST, "file-hook.js"),
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  target: "node22",
+  external: EXTERNALS,
+  sourcemap: "inline",
+  logLevel: "warning",
+});
+
 // The core classifier reads prompts via `__dirname/../prompts/system.txt`.
-// Post-bundle, `__dirname` is DIST; post-source (tsx dev), it's CC_ROOT/src.
-// In BOTH cases `../prompts/` resolves to CC_ROOT/prompts/, so make sure
-// that dir exists regardless of which run mode hit this build.
 import { cpSync } from "fs";
 cpSync(join(ROOT, "prompts"), join(CC_ROOT, "prompts"), { recursive: true });
 
-console.log(`[build] claude-code hook bundled → ${DIST}/hook.js`);
+console.log(`[build] claude-code bash hook  → ${DIST}/hook.js`);
+console.log(`[build] claude-code file hook  → ${DIST}/file-hook.js`);
 console.log(`[build] install:  claude --plugin-dir ${CC_ROOT}`);
