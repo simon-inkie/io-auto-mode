@@ -4,6 +4,11 @@
 
 set -u
 
+# CLAUDE_PLUGIN_ROOT is only set when installed as a Claude Code plugin.
+# When invoked directly from settings.json, derive root from this script's
+# location: bin/classify-file.sh → plugin root is one level up.
+: "${CLAUDE_PLUGIN_ROOT:=$(cd "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/.." && pwd)}"
+
 HANDLER_JS="${CLAUDE_PLUGIN_ROOT}/dist/file-hook.js"
 HANDLER_TS="${CLAUDE_PLUGIN_ROOT}/src/file-hook.ts"
 
