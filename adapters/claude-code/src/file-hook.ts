@@ -174,25 +174,30 @@ function matchesGlob(filePath: string, pattern: string): boolean {
   // Exact match
   if (filePath === expanded) return true;
 
-  // ** recursive glob — treat "dir/**" as "anything under dir"
-  if (expanded.endsWith("/**")) {
-    const prefix = expanded.slice(0, -3); // remove /**
-    return filePath === prefix || filePath.startsWith(prefix + "/");
-  }
-
-  // * single-level glob at the end
-  if (expanded.endsWith("/*")) {
-    const prefix = expanded.slice(0, -2);
-    const rest = filePath.slice(prefix.length + 1);
-    return filePath.startsWith(prefix + "/") && !rest.includes("/");
-  }
-
   // Prefix match for dirs without glob
   if (!expanded.includes("*")) {
     return filePath === expanded || filePath.startsWith(expanded + "/");
   }
 
-  return false;
+  // Convert the pattern to a regex:
+  //   **   → .*                (any number of segments, including slashes)
+  //   *    → [^/]*             (single segment, no slashes)
+  //   rest → escaped literal
+  // This covers exact match, */suffix, /**/ prefix, mid-path *, and combos
+  // like /home/simon/.claude/projects/*/memory/*.md.
+  const regexBody = expanded
+    .split(/(\*\*|\*)/)
+    .map((chunk) => {
+      if (chunk === "**") return ".*";
+      if (chunk === "*") return "[^/]*";
+      return chunk.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
+    })
+    .join("");
+  try {
+    return new RegExp(`^${regexBody}$`).test(filePath);
+  } catch {
+    return false;
+  }
 }
 
 function matchesAnyPattern(filePath: string, patterns: string[], projectDir: string): boolean {
