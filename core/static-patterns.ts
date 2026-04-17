@@ -7,7 +7,12 @@ import type { ClassifierDecision } from './types.js';
 const STATIC_BLOCK: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /\brm\s+(-[a-z]*\s+)*\/\s*$/i, reason: 'Delete root filesystem' },
   { pattern: /\brm\s+(-[a-z]*\s+)*~\/?\s*$/i, reason: 'Delete entire home directory' },
-  { pattern: /\brm\s+(-[a-z]*\s+)*\/(home|etc|var|usr|boot|sys|proc|lib|bin|sbin)\b/i, reason: 'Delete critical system directory' },
+  // Match `rm -rf /home` or `rm -rf /home/` with nothing further — the top-level
+  // dir itself. Explicit sub-paths like `/home/simon/project/build` fall through
+  // to the LLM classifier, which can reason about whether the specific path is
+  // safe. Without this narrowing, every `rm -rf /home/<user>/<anything>` was
+  // being false-positive blocked.
+  { pattern: /\brm\s+(-[a-z]*\s+)*\/(home|etc|var|usr|boot|sys|proc|lib|bin|sbin)\/?(\s|$)/i, reason: 'Delete critical system directory' },
   { pattern: /\|\s*(bash|sh|zsh|eval)\b/, reason: 'Pipe to shell interpreter' },
   { pattern: /\bcurl\b.*\|\s*(bash|sh)/, reason: 'Download and execute pattern (curl | bash)' },
   { pattern: /\bwget\b.*\|\s*(bash|sh)/, reason: 'Download and execute pattern (wget | bash)' },
