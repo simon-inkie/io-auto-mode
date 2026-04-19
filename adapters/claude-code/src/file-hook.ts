@@ -73,6 +73,7 @@ const DEFAULT_ZONES: FileZones = {
     "~/git-repos/**",
     "~/io-projects/**",
     "~/.openclaw/workspace/**",
+    "~/.the-brain/**",
     "~/.claude/projects/**",
     "~/.claude/settings.local.json",
     "/tmp/**",
