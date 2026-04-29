@@ -40,6 +40,20 @@ Optionally surface a warning if the allowlist has grown very large (e.g. >50 ent
 
 ---
 
+## Observability
+
+### Capture token usage in `auto-mode-log.jsonl`
+**Priority:** Medium
+**Context:** Today the log captures `stage`, `decision`, `model`, `durationMs`, and (for Stage 2) `thinking`, but not `inputTokens` / `outputTokens`. That makes cost claims in the README estimative rather than measured. AI SDK migration plans this anyway (`AI-SDK-MIGRATION-SPEC.md` §"Cost telemetry"); pulling it forward as a small standalone change is cheap.
+
+**Scope:**
+1. Extend `ModelCallFn` return type from `Promise<string>` to `Promise<{ text: string; usage?: { inputTokens: number; outputTokens: number } }>` — additive, no breaking changes if `usage` is optional.
+2. Both adapters (`adapters/openclaw/src/plugin.ts`, `adapters/claude-code/src/model-call.ts`) populate `usage` from the underlying provider response.
+3. `core/logger.ts` writes `inputTokens`, `outputTokens`, and a derived `costUSD` (using a small per-model rate table) into each log entry.
+4. Update README's Cost section to quote a measured £/day with a source link to a fresh log roll-up.
+
+---
+
 ## Platform adapters
 
 ### Cursor adapter
