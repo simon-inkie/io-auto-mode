@@ -138,6 +138,155 @@ additively; the global deny list cannot be weakened.
 
 ---
 
+## Cursor
+
+Cursor's hooks system fires at four points the classifier cares about:
+
+- `beforeSubmitPrompt` — captures the user's prompt + attachments to a
+  per-conversation cache so the next shell-execution call has conversation
+  context for prompt-injection-hardened classification.
+- `beforeShellExecution` — Bash classifier, LLM-backed, fail-closed.
+- `beforeReadFile` — file classifier, path-based, sub-millisecond.
+- `preToolUse` (matched on `Edit|Write` only) — file classifier for write/edit
+  tool calls.
+
+All decisions log to `~/.io-auto-mode/auto-mode-log.jsonl`, with `conversation_id`,
+`cursor_version`, `workspace_roots`, and (when logged in) `user_email`
+populated for richer audit attribution.
+
+### Step 1: Clone, install, build
+
+```bash
+git clone https://github.com/simon-inkie/io-auto-mode.git
+cd io-auto-mode
+pnpm install
+node scripts/build.mjs
+```
+
+The build emits three handler bundles into `adapters/cursor/dist/`:
+
+```
+adapters/cursor/dist/
+├── hook.js          # beforeShellExecution
+├── file-hook.js     # beforeReadFile + preToolUse(Edit|Write)
+└── prompt-hook.js   # beforeSubmitPrompt
+```
+
+Wrappers at `adapters/cursor/bin/` invoke these by default and fall back to
+running the TypeScript via `tsx` if you're hacking on the adapter.
+
+### Step 2: Provide your API key
+
+Cursor hooks (like Claude Code's) run in a sandboxed environment that doesn't
+inherit your shell's environment variables. Put your Gemini key in:
+
+```bash
+mkdir -p ~/.io-auto-mode
+cat > ~/.io-auto-mode/.env <<'EOF'
+GEMINI_API_KEY=your-google-gemini-key-here
+EOF
+chmod 600 ~/.io-auto-mode/.env
+```
+
+Same path the Claude Code adapter uses. Anthropic/OpenAI keys go in the same
+file if you've configured those models. The legacy `~/io-data/.env` is also
+accepted for back-compat.
+
+### Step 3: Wire the four hooks into `~/.cursor/hooks.json`
+
+Add the following, substituting `<repo-path>` for the absolute path you
+cloned to:
+
+```json
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "<repo-path>/adapters/cursor/bin/capture-prompt.sh",
+        "timeout": 1,
+        "failClosed": false
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": "<repo-path>/adapters/cursor/bin/classify-shell.sh",
+        "timeout": 8,
+        "failClosed": true
+      }
+    ],
+    "beforeReadFile": [
+      {
+        "command": "<repo-path>/adapters/cursor/bin/classify-file.sh",
+        "timeout": 2,
+        "failClosed": false
+      }
+    ],
+    "preToolUse": [
+      {
+        "_comment": "Edit|Write only — Read is handled by beforeReadFile, Shell by beforeShellExecution. Do not widen.",
+        "command": "<repo-path>/adapters/cursor/bin/classify-file.sh",
+        "matcher": "Edit|Write",
+        "timeout": 2,
+        "failClosed": false
+      }
+    ]
+  }
+}
+```
+
+The four hooks together give prompt-injection-hardening parity with the
+Claude Code adapter — the README's "assistant text excluded from classifier
+input" guarantee holds across both runtimes via different mechanisms.
+
+`failClosed: true` on `beforeShellExecution` because that's the high-stakes
+path. The other three are fail-open (parity with the Claude Code adapter and
+because the prompt-capture/file-zone hooks are auxiliary).
+
+You can also drop this in a project-local `<project>/.cursor/hooks.json` if
+you'd rather configure per-repo than user-global.
+
+### Step 4: Restart Cursor
+
+Cursor reads hooks.json at session start. Quit and relaunch.
+
+### Step 5: Verify
+
+Open a Cursor session and ask the agent to run a benign command (e.g. `ls`).
+Static-allow patterns fire at sub-millisecond and you should see no
+permission prompt. Then check the log:
+
+```bash
+tail -f ~/.io-auto-mode/auto-mode-log.jsonl
+```
+
+Each entry includes `stage`, `decision`, `durationMs`, and (for Cursor)
+`conversation_id`. Send a follow-up message and watch a new
+`prompt-capture` entry land before the next shell-execution decision.
+
+### Optional: configure file zones
+
+Same `~/.io-auto-mode/config.json` as the Claude Code adapter — see Step 5
+of the Claude Code section above. Cursor and Claude Code share the same zone
+config; one place to maintain the rules for both runtimes.
+
+### Known limitations
+
+- **`beforeReadFile` cannot say "ask"** — Cursor's schema only allows
+  `permission: "allow" | "deny"` for file reads. The adapter collapses any
+  would-be `ask` decision to `deny`. If you hit a deny on a path you trust,
+  add it to `allowRead` in `~/.io-auto-mode/config.json` rather than waiting
+  for an ask prompt.
+- **Tab hooks not yet covered** — `beforeTabFileRead` and `afterFileEdit`
+  protect Cursor's autonomous Tab completion, not Agent flows. Planned for
+  a follow-up release; see [`specs/cursor-adapter.md`](./specs/cursor-adapter.md)
+  §11.
+- **MCP tool calls not yet classified** — `beforeMCPExecution` is wired up
+  on Cursor's side, but our MCP classifier hasn't shipped yet. Tracked in
+  the README roadmap.
+
+---
+
 ## OpenClaw
 
 Reference implementation. Plugin loads from source at runtime; no pre-build

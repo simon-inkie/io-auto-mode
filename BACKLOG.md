@@ -56,19 +56,18 @@ Optionally surface a warning if the allowlist has grown very large (e.g. >50 ent
 
 ## Platform adapters
 
-### Cursor adapter
-**Priority:** High (specced, ready to execute)
-**Spec:** [`specs/cursor-adapter.md`](./specs/cursor-adapter.md)
-**Context:** Cursor's [hooks system](https://cursor.com/docs/hooks) exposes the same shape we need — `beforeShellExecution`, `beforeReadFile`, `preToolUse` (matched on Edit/Write). Maps cleanly onto our existing core classifier; pure adapter glue, no core changes.
+### Cursor Tab hooks (`beforeTabFileRead` / `afterFileEdit`)
+**Priority:** Medium (after v0.1.0 lands and we have user feedback)
+**Context:** Cursor's autonomous Tab inline-completion runs without a human in the loop, fires per-keystroke, and uses a different hook surface than Agent (`beforeTabFileRead`, `afterFileEdit`). Arguably *higher*-stakes than Agent coverage, but doubles the integration surface and the per-keystroke latency budget is tight.
+**Scope sketch:** new `bin/classify-tab-file.sh` + adapter routing + per-keystroke perf measurement before shipping. Most hooks here are `allow|deny`-only (same constraint as `beforeReadFile`).
 
-**Scope (per spec v2, ~3.5 hours):**
-1. `adapters/cursor/src/{hook,file-hook,prompt-hook,prompt-store}.ts` — four files including the new prompt cache for `beforeSubmitPrompt` → next-call context bridge (gives Stage 2 prompt-injection-hardening parity with Claude Code)
-2. `adapters/cursor/bin/{classify-shell,classify-file,capture-prompt}.sh` wrapper scripts
-3. Build pipeline integration (`scripts/build.mjs`)
-4. `tests/cursor-hook.test.ts` — schema-mapping + cache tests (~50-70 cases)
-5. `INSTALL.md` `## Cursor` section + README updates + roadmap tick
+### Cursor adapter — hot-reload smoke test
+**Priority:** Low
+**Context:** Spec §10 / §12 flagged hot-reload-vs-restart behaviour as a wildcard time-sink. v0.1.x ships with INSTALL.md saying "restart Cursor". A live smoke test would let us confirm whether `~/.cursor/hooks.json` edits pick up without restart, and update INSTALL with the truthful answer.
 
-**Out of scope for v0.1.x:** `beforeMCPExecution` (gated on MCP classifier roadmap; note: payload's `tool_input` is JSON-stringified), Tab hooks (`beforeTabFileRead`, `afterTabFileEdit`; both also `allow|deny`-only), subagent + lifecycle hooks, `updated_input` rewriting, prompt-cache TTL cleanup. See spec §11 for full deferred list.
+### DRY up `model-call.ts` across adapters
+**Priority:** Low
+**Context:** Both `adapters/claude-code/src/model-call.ts` and `adapters/cursor/src/model-call.ts` are byte-identical (~80 LOC of provider-API call code). It only does `fetch()` calls — no platform-specific dependency — so it belongs in `core/`. Move + import-rewrite is ~10 minutes; deferred only because the duplication is harmless and it's worth doing alongside the AI SDK migration when both adapters' model-call shapes change anyway.
 
 ---
 

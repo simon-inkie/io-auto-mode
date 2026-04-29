@@ -3,7 +3,7 @@
 > A hybrid static + LLM exec security classifier for AI coding agents.
 > Stops prompt injection and accidental destruction without making automation impossible.
 
-**Status:** early (`v0.1.0`). OpenClaw and Claude Code adapters both shipping. Claude Code adapter has been in production use for ~2 weeks. Tier 1 tests cover static patterns + file-hook zone matching (157 tests); pipeline-level + transcript tests on the next tier. Looking for feedback from people running agentic dev workflows.
+**Status:** early (`v0.1.0`). OpenClaw, Claude Code, and Cursor adapters all shipping. Claude Code adapter has been in production use for ~2 weeks; Cursor adapter is fresh. Tier 1 tests cover static patterns + file-hook zone matching + Cursor schema mappings (190 tests); full pipeline + transcript tests on the next tier. Looking for feedback from people running agentic dev workflows.
 
 ---
 
@@ -122,9 +122,10 @@ core/                      Shared classifier logic — no platform deps
 adapters/
   openclaw/                OpenClaw plugin (reference impl)
   claude-code/             Claude Code PreToolUse hooks (Bash + file)
-specs/                     Future-work design specs (cursor adapter, AI SDK migration, ...)
-tests/                     Tier 1 tests — static patterns + file-hook zones
-INSTALL.md                 Install + config guide for both adapters
+  cursor/                  Cursor hooks (prompt + shell + file + write/edit)
+specs/                     Future-work design specs (AI SDK migration, ...)
+tests/                     Tier 1 tests — static patterns + file-hook zones + cursor mappings
+INSTALL.md                 Install + config guide for all three adapters
 ```
 
 Small, focused codebase. Core has no runtime deps. The OpenClaw adapter pulls in `openclaw`; the Claude Code adapter is dep-free.
@@ -185,6 +186,33 @@ Two hooks register: a Bash classifier (LLM-backed, fail-closed) and a path-based
 
 ---
 
+## Quick start (Cursor)
+
+See [`INSTALL.md`](./INSTALL.md) for the full guide. TL;DR:
+
+```bash
+# 1. Clone + install + build the adapter
+git clone https://github.com/simon-inkie/io-auto-mode.git
+cd io-auto-mode
+pnpm install
+node scripts/build.mjs
+
+# 2. Drop your Gemini key where the hooks can read it
+mkdir -p ~/.io-auto-mode
+echo 'GEMINI_API_KEY=your-key-here' >> ~/.io-auto-mode/.env
+
+# 3. Wire four hooks into ~/.cursor/hooks.json
+#    (full snippet in INSTALL.md — beforeSubmitPrompt, beforeShellExecution,
+#     beforeReadFile, preToolUse with matcher Edit|Write)
+
+# 4. Restart Cursor, then watch decisions land
+tail -f ~/.io-auto-mode/auto-mode-log.jsonl
+```
+
+Four hooks total: a Bash classifier (`beforeShellExecution`), a file classifier (`beforeReadFile` + `preToolUse` Edit|Write), and a prompt-capture (`beforeSubmitPrompt`) that gives Stage 2 conversation context for prompt-injection hardening — same guarantee as Claude Code, different mechanism.
+
+---
+
 ## Configuration
 
 All options under `plugins.entries.io-auto-mode.config`:
@@ -227,9 +255,9 @@ Useful both for debugging surprising blocks and for reviewing what your agent ha
 - [x] Per-project config overlays
 - [x] Static-layer hardening (top-level critical-dir rule, mid-path glob matching)
 - [x] Claude Code adapter (PreToolUse hooks; in production ~2 weeks)
-- [x] Tier 1 tests — static patterns + file-hook zone matching (157 tests, `tsx --test`)
+- [x] Cursor adapter (`beforeSubmitPrompt` + `beforeShellExecution` + `beforeReadFile` + `preToolUse`; prompt-injection-hardening parity with Claude Code)
+- [x] Tier 1 tests — static patterns + file-hook zone matching + Cursor schema mappings (190 tests, `tsx --test`)
 - [x] CI — GitHub Actions running typecheck + tests on every push / PR
-- [ ] Cursor adapter — `beforeSubmitPrompt` + shell + file hooks, prompt-injection-hardening parity ([spec](./specs/cursor-adapter.md))
 - [ ] Tier 2 tests — full classifier pipeline (mocked LLM) + transcript prompt-injection coverage
 - [ ] MCP tool classifier — server/tool-name matching
 - [ ] AI SDK migration — provider-agnostic model calls ([spec](./specs/ai-sdk-migration.md))
