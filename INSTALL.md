@@ -1,21 +1,151 @@
 # io-auto-mode — Installation Guide
 
-A hybrid static + LLM exec security classifier for OpenClaw. Intercepts every
-shell command before execution and classifies it as allow / ask / block.
+A hybrid static + LLM exec security classifier for AI coding agents.
+Intercepts every shell command and file-tool call before execution and
+classifies it as allow / ask / block.
+
+Two adapters are supported:
+
+- [Claude Code](#claude-code) — `PreToolUse` hooks (Bash + Read/Write/Edit)
+- [OpenClaw](#openclaw) — `before_tool_call` plugin
+
+Pick whichever runtime you use; both share the same `core/` classifier.
 
 ---
 
 ## Requirements
 
-- OpenClaw **2026.4.2+**
 - Node.js 22+
 - A Google Gemini API key (defaults use `gemini-2.5-flash` for all stages —
   fast, cheap, and accurate enough for classification). You can swap providers
   via config; see Configuration Reference below.
+- For the OpenClaw adapter: OpenClaw **2026.4.2+**.
 
 ---
 
-## Step 1: Register your AI provider key
+## Claude Code
+
+Hooks register at `PreToolUse` for `Bash` (LLM-backed, fail-closed) and
+`Read|Write|Edit` (path-based, sub-millisecond). All decisions log to
+`~/.io-auto-mode/auto-mode-log.jsonl`.
+
+### Step 1: Clone, install, build
+
+```bash
+git clone https://github.com/simon-inkie/io-auto-mode.git
+cd io-auto-mode
+pnpm install
+node scripts/build.mjs
+```
+
+The build emits `adapters/claude-code/dist/hook.js` and
+`adapters/claude-code/dist/file-hook.js`. The wrapper scripts at
+`adapters/claude-code/bin/` will use these by default and fall back to running
+the TypeScript directly via `tsx` if you're hacking on the adapter.
+
+### Step 2: Provide your API key
+
+Claude Code hooks run in a sandboxed environment that doesn't inherit your
+shell's environment variables. Drop your key into a `.env` file the hook can
+read:
+
+```bash
+mkdir -p ~/.io-auto-mode
+cat > ~/.io-auto-mode/.env <<'EOF'
+GEMINI_API_KEY=your-google-gemini-key-here
+EOF
+chmod 600 ~/.io-auto-mode/.env
+```
+
+Anthropic / OpenAI / other provider keys go in the same file if you've
+configured those models. The legacy path `~/io-data/.env` is also accepted
+for back-compat.
+
+### Step 3: Wire the hooks into `~/.claude/settings.json`
+
+Add the following under `hooks.PreToolUse` in `~/.claude/settings.json`,
+substituting `<repo-path>` for the absolute path you cloned to:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<repo-path>/adapters/claude-code/bin/classify.sh",
+            "timeout": 8,
+            "async": false
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<repo-path>/adapters/claude-code/bin/classify-file.sh",
+            "timeout": 2,
+            "async": false
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+If you already have `PreToolUse` entries for other tools, merge — don't
+overwrite. The two `matcher` keys (`Bash` and `Read|Write|Edit`) target
+different tool-call types and are independent.
+
+### Step 4: Restart your Claude Code session
+
+Hook config is read at session start. Quit and re-launch `claude`.
+
+### Step 5: Verify
+
+In a Claude Code session, ask the agent to run a benign command (e.g. `ls`).
+You should see no prompt — the static-allow pattern fires at sub-millisecond.
+Then check the log:
+
+```bash
+tail -f ~/.io-auto-mode/auto-mode-log.jsonl
+```
+
+You should see one entry per tool call, with `stage`, `decision`, and
+`durationMs` fields.
+
+### Optional: configure file zones
+
+By default, the file-hook denies access to `~/.ssh/`, `~/.aws/`, `~/.gnupg/`,
+`/etc/`, `/usr/`, etc., and only allows reads/writes inside the project
+directory + `/tmp/`. To extend either list, create `~/.io-auto-mode/config.json`:
+
+```json
+{
+  "fileZones": {
+    "allowRead": ["~/git-repos/**"],
+    "allowWrite": ["~/scratch/**"]
+  }
+}
+```
+
+Or `<project>/.io-auto-mode.json` for project-scoped overrides. Layers merge
+additively; the global deny list cannot be weakened.
+
+---
+
+## OpenClaw
+
+Reference implementation. Plugin loads from source at runtime; no pre-build
+step needed.
+
+---
+
+### Step 1: Register your AI provider key
 
 **Do NOT use `openclaw onboard`** — it reruns the full setup wizard.
 
@@ -34,7 +164,7 @@ and set the model strings in config (see Configuration Reference).
 
 ---
 
-## Step 2: Add plugin to `openclaw.json`
+### Step 2: Add plugin to `openclaw.json`
 
 Add to `plugins.load.paths` so OpenClaw discovers it on startup:
 
@@ -68,7 +198,7 @@ openclaw config patch '{"plugins":{"load":{"paths":["/path/to/io-auto-mode"]},"e
 
 ---
 
-## Step 3: Restart gateway
+### Step 3: Restart gateway
 
 ```bash
 openclaw gateway restart
@@ -76,7 +206,7 @@ openclaw gateway restart
 
 ---
 
-## Step 4: Verify
+### Step 4: Verify
 
 Check the classifier is running and logging decisions:
 

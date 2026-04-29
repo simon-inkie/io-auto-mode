@@ -12,21 +12,32 @@
  * Fail-closed: any uncaught error → deny. Never throws to Claude Code.
  */
 
-// Load API keys from ~/io-data/.env before anything else. Claude Code hooks
+// Load API keys from a .env file before anything else. Claude Code hooks
 // run in a sandboxed env that doesn't inherit the user's shell vars.
+//
+// Search order (first match wins):
+//   1. ~/.io-auto-mode/.env  (canonical — sits next to the user's config)
+//   2. ~/io-data/.env        (legacy convention, kept for back-compat)
+// If neither exists, keys must already be in process.env.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
-try {
-  const envPath = resolve(homedir(), "io-data", ".env");
-  const content = readFileSync(envPath, "utf-8");
-  for (const line of content.split("\n")) {
-    const match = line.match(/^([^#]\w*)=(.+)$/);
-    if (match && !process.env[match[1]]) {
-      process.env[match[1]] = match[2].trim();
+const ENV_PATHS = [
+  resolve(homedir(), ".io-auto-mode", ".env"),
+  resolve(homedir(), "io-data", ".env"),
+];
+for (const envPath of ENV_PATHS) {
+  try {
+    const content = readFileSync(envPath, "utf-8");
+    for (const line of content.split("\n")) {
+      const match = line.match(/^([^#]\w*)=(.+)$/);
+      if (match && !process.env[match[1]]) {
+        process.env[match[1]] = match[2].trim();
+      }
     }
-  }
-} catch { /* .env not found — keys must already be in env */ }
+    break; // first match wins
+  } catch { /* try the next path */ }
+}
 
 import { classify } from "../../../core/classifier.js";
 import { serialiseTranscript } from "../../../core/transcript.js";
