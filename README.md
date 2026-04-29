@@ -229,7 +229,7 @@ Useful both for debugging surprising blocks and for reviewing what your agent ha
 - [x] Claude Code adapter (PreToolUse hooks; in production ~2 weeks)
 - [x] Tier 1 tests — static patterns + file-hook zone matching (157 tests, `tsx --test`)
 - [x] CI — GitHub Actions running typecheck + tests on every push / PR
-- [ ] Cursor adapter — Agent shell + file hooks ([spec](./specs/cursor-adapter.md))
+- [ ] Cursor adapter — `beforeSubmitPrompt` + shell + file hooks, prompt-injection-hardening parity ([spec](./specs/cursor-adapter.md))
 - [ ] Tier 2 tests — full classifier pipeline (mocked LLM) + transcript prompt-injection coverage
 - [ ] MCP tool classifier — server/tool-name matching
 - [ ] AI SDK migration — provider-agnostic model calls ([spec](./specs/ai-sdk-migration.md))

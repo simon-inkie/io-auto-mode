@@ -1,9 +1,9 @@
 # Cursor Adapter Spec
 
-**Status:** spec, not started
-**Date:** 2026-04-29
+**Status:** spec, ready to execute
+**Date:** 2026-04-29 (revised after researcher pass against cursor.com/docs/hooks)
 **Owner:** Doctor Two (platform-side implementation)
-**Goal:** Add a Cursor adapter alongside Claude Code and OpenClaw, so io-auto-mode protects Cursor's Agent (and optionally Tab) tool-execution paths via Cursor's native hooks system.
+**Goal:** Add a Cursor adapter alongside Claude Code and OpenClaw, so io-auto-mode protects Cursor's Agent tool-execution paths via Cursor's native hooks system, with prompt-injection-hardening parity with the Claude Code adapter.
 
 ---
 
@@ -15,42 +15,71 @@ Reference: <https://cursor.com/docs/hooks>
 
 ---
 
-## 1. Cursor hook surface (relevant subset)
+## 1. Cursor hook surface
 
-| Cursor hook | Fires on | Maps to |
-|---|---|---|
-| `beforeShellExecution` | Agent shell command, pre-exec | Bash classifier |
-| `beforeReadFile` | Agent file read, pre-exec | File-hook (Read) |
-| `preToolUse` (matched on Edit/Write tool names) | Agent file write/edit, pre-exec | File-hook (Write/Edit) |
-| `beforeMCPExecution` | Agent MCP tool call, pre-exec | MCP classifier (deferred) |
-| `beforeTabFileRead` | Tab inline-completion file read | File-hook (Read) — separate policy possible |
-| `afterFileEdit` | Agent file edit, **post-hoc** | Audit only — too late to prevent |
+| Cursor hook | Fires on | In scope | Maps to |
+|---|---|---|---|
+| `beforeSubmitPrompt` | User hits send, before backend request | ✓ | Capture user prompt for next-call context |
+| `beforeShellExecution` | Agent shell command, pre-exec | ✓ | Bash classifier |
+| `beforeReadFile` | Agent file read, pre-exec | ✓ | File-hook (Read) |
+| `preToolUse` (matched on Edit/Write only) | Agent file write/edit, pre-exec | ✓ | File-hook (Write/Edit) |
+| `beforeMCPExecution` | Agent MCP tool call, pre-exec | ✗ | MCP classifier (deferred — note: payload's `tool_input` is JSON-stringified, not an object) |
+| `beforeTabFileRead` | Tab inline-completion file read | ✗ | File-hook (Read) — also allow/deny only, no ask |
+| `afterFileEdit` | Agent file edit, post-hoc | ✗ | Audit only — too late to prevent |
+| `subagentStart` / `subagentStop` | Subagent lifecycle | ✗ | Audit-only; not core to permission classification |
+| `stop` / `sessionStart` / `sessionEnd` | Lifecycle | ✗ | Nothing for the classifier to do |
 
-**In scope for v0.1.x:** rows 1-3 (Agent shell + Agent file read + Agent file write/edit).
-**Deferred:** rows 4-6.
+**Important: `beforeReadFile` and `beforeTabFileRead` only support `permission: "allow" | "deny"`.** They do **not** accept `ask`. Our adapter must collapse core's `ask` → `deny` (with the reason in `user_message`) for any file-read hook. This matches the project's fail-closed posture.
 
 ---
 
 ## 2. Architecture
 
-Mirrors the Claude Code adapter exactly. Three files in `adapters/cursor/src/`:
+Mirrors the Claude Code adapter, with one new piece: a small prompt-cache to bridge `beforeSubmitPrompt` → next `beforeShellExecution`.
 
-- `hook.ts` — `beforeShellExecution` handler. Reads stdin, builds a `TranscriptEntry`-shaped context (using `transcript_path` env var if available), runs `core/classifier.classify()`, maps decision to Cursor's `{permission, user_message, agent_message}` JSON.
-- `file-hook.ts` — handles both `beforeReadFile` and `preToolUse` (matched on Edit/Write). Path-based zone classifier; same shape as Claude Code's `file-hook.ts`. Tool-name routing (Read → `allowRead`; Edit/Write → `allowWrite`).
-- `read-transcript.ts` — best-effort transcript reader for Cursor's `transcript_path`. Falls back to empty context if missing.
+Four files in `adapters/cursor/src/`:
 
-Two bin wrappers in `adapters/cursor/bin/`:
+- `hook.ts` — `beforeShellExecution` handler. Reads stdin, loads the cached user prompt for this `conversation_id` (if present), builds a `TranscriptEntry`-shaped context, runs `core/classifier.classify()`, maps decision to Cursor's `{permission, user_message, agent_message}` JSON.
+- `file-hook.ts` — handles both `beforeReadFile` and `preToolUse` (matched on Edit/Write). Path-based zone classifier; same shape as Claude Code's `file-hook.ts`. Tool-name routing (Read → `allowRead`; Edit/Write → `allowWrite`). Collapses `ask` → `deny` for `beforeReadFile` since Cursor's schema doesn't accept `ask` there.
+- `prompt-store.ts` — write/read user prompts keyed by `conversation_id`. Atomic-rename writes; best-effort reads. See §3 prompt-cache design below.
+- `prompt-hook.ts` — `beforeSubmitPrompt` handler. Calls `prompt-store.write(conversation_id, prompt)`. Always `permission: allow` (this hook never blocks; its only job is to capture context).
 
-- `classify-shell.sh` — invokes `dist/hook.js` (or `src/hook.ts` via `tsx` in dev).
+Three bin wrappers in `adapters/cursor/bin/`:
+
+- `classify-shell.sh` — invokes `dist/hook.js`.
 - `classify-file.sh` — invokes `dist/file-hook.js`.
+- `capture-prompt.sh` — invokes `dist/prompt-hook.js`.
 
-Both follow the same shape as the Claude Code adapter's wrappers: derive `CURSOR_HOOK_ROOT` from `BASH_SOURCE`; prefer bundled output; fall back to source.
+All follow the same shape as the Claude Code adapter's wrappers: derive `CURSOR_HOOK_ROOT` from `BASH_SOURCE`; prefer bundled output; fall back to source via `tsx`.
 
-**Code reuse:** zero changes to `core/`. Adapter is purely glue: stdin parsing → core call → stdout shaping.
+**Code reuse:** zero changes to `core/`. Adapter is purely glue plus the new prompt-cache.
 
 ---
 
 ## 3. Schema mappings
+
+### `beforeSubmitPrompt` → prompt cache
+
+Cursor input:
+```json
+{
+  "conversation_id": "string",
+  "generation_id": "string",
+  "model": "string",
+  "hook_event_name": "beforeSubmitPrompt",
+  "cursor_version": "string",
+  "workspace_roots": ["<path>"],
+  "user_email": "string | null",
+  "transcript_path": "string | null",
+  "prompt": "<user message body>",
+  "attachments": [{"type": "file | rule", "file_path": "<absolute path>"}]
+}
+```
+
+Adapter:
+1. Persist the user prompt + attachments to `~/.io-auto-mode/cache/cursor-prompts/<conversation_id>.json` via atomic write (write to `<file>.tmp`, then `rename` → `<file>.json`).
+2. Return `{permission: "allow"}` — this hook never blocks the user.
+3. Log a tiny entry to `auto-mode-log.jsonl` with `{type: "prompt-capture", conversation_id, durationMs}` so the audit trail shows context was captured.
 
 ### `beforeShellExecution` → core classifier
 
@@ -59,13 +88,22 @@ Cursor input:
 {
   "command": "<full terminal command>",
   "cwd": "<current working directory>",
-  "sandbox": false
+  "sandbox": false,
+  "conversation_id": "string",
+  "user_email": "string | null",
+  "workspace_roots": ["<path>"],
+  "cursor_version": "string"
 }
 ```
 
-Maps to: `classify(command, transcript, modelCall, config, { isMainSession: !sandbox })`. The `sandbox` field tells us whether Cursor is already running this in a containerised sandbox; if true we can be slightly more permissive at Stage 2 (matches the Claude Code adapter's main-session-vs-subagent distinction).
+Adapter:
+1. Read cached prompt (if any) for `conversation_id` from `prompt-store`.
+2. Build `TranscriptEntry[]` with two entries: the cached user prompt (role: `user`, source: `direct`), and the current `command` as a tool-use entry. If no cached prompt, build with just the command (degraded; same behaviour as Claude Code without `transcript_path`).
+3. Call `classify(command, transcript, modelCall, config, { isMainSession: !sandbox })`.
 
-Output mapping (from `core` decision to Cursor):
+**Why `isMainSession: !sandbox`:** Cursor's `sandbox` field indicates the command is running in a containerised, isolated environment where blast radius is contained. In core's terminology, `isMainSession: true` means the user is present at a real terminal — fail-closed leaning toward `ask` is appropriate. When `sandbox: true`, the same risk is mitigated by the sandbox itself, so we let core run with `isMainSession: false` (fall-through to `block` rather than `ask` on classifier failure, since asking when the user can't see the prompt is worse than blocking and forcing a retry).
+
+Output mapping:
 
 | `core` decision | Cursor `permission` | `user_message` | `agent_message` |
 |---|---|---|---|
@@ -80,25 +118,50 @@ Cursor input:
 {
   "file_path": "<absolute path>",
   "content": "<file contents>",
-  "attachments": [{"type": "file | rule", "file_path": "<absolute path>"}]
+  "attachments": [{"type": "file | rule", "file_path": "<absolute path>"}],
+  "conversation_id": "string",
+  "user_email": "string | null"
 }
 ```
 
-Map to file-hook with `tool_name = "Read"`. Output: `{permission: allow|deny, user_message}`. We ignore `content` and `attachments` for v0.1.x (path-based decisions only); future versions could inspect attachments to extend deny zones (e.g. "this file references a .env path even if reading is allowed").
+Adapter:
+1. Map to file-hook with `tool_name = "Read"`.
+2. **Collapse `ask` → `deny`** — Cursor's `beforeReadFile` schema is `allow | deny` only, no `ask`. If file-hook would have returned `ask`, the adapter returns `deny` with the reason in `user_message`. This matches the fail-closed posture; user can override the deny by adding the path to their `allowRead` zone in `~/.io-auto-mode/config.json`.
+3. Ignore `content` and `attachments` for v0.1.x (path-based decisions only).
 
-### `preToolUse` (Edit/Write) → file-hook
+Output: `{permission: "allow" | "deny", user_message: "<reason if denied>"}`.
+
+### `preToolUse` (Edit/Write only) → file-hook
 
 Cursor input:
 ```json
 {
-  "tool_name": "Edit",
-  "tool_input": {"file_path": "/abs/path", "..." : "..."},
+  "tool_name": "Edit | Write",
+  "tool_input": {"file_path": "/abs/path", ...},
   "tool_use_id": "abc123",
-  "cwd": "/project"
+  "cwd": "/project",
+  "conversation_id": "string"
 }
 ```
 
-Match on `tool_name ∈ {Edit, Write}` (the hook also fires for unrelated tool calls; we allow-through any tool we don't recognise rather than block-by-default at this layer). Use `cwd` for `${projectDir}` expansion.
+**Matcher rationale (do not widen):** the hook config sets `matcher: "Edit|Write"` because:
+- `Read` is already handled by `beforeReadFile`
+- `Shell` is already handled by `beforeShellExecution`
+- `Task` (Cursor's subagent tool) is out of scope (see §11)
+- `MCP:<tool>` would be handled by `beforeMCPExecution` once we ship the MCP classifier
+- Any other tool name we don't recognise allow-throughs at the adapter (returns `permission: allow` silently)
+
+Widening the matcher to `*` or omitting it would create double-classification with the more specific hooks. Future contributors should add new tool-name mappings here, not widen the matcher.
+
+Adapter: match on `tool_name ∈ {Edit, Write}`; if matched, run file-hook with `tool_name = "Write"` (Edit and Write share the `allowWrite` zone). Use `cwd` for `${projectDir}` expansion.
+
+Output: same shape as `beforeShellExecution` (allow/deny/ask all valid for `preToolUse`).
+
+### Identity fields → audit log
+
+Every Cursor hook payload includes `conversation_id`, `generation_id`, `cursor_version`, `workspace_roots`, and (when logged-in) `user_email`. Add all five to each `auto-mode-log.jsonl` entry the adapter writes — they're a strict superset of what the Claude Code adapter logs today and provide better identity attribution for security audits without any extra work.
+
+The logger (`core/logger.ts`) currently writes a flat object; the adapter just merges these fields into the log entry before write. Zero changes to core.
 
 ---
 
@@ -110,6 +173,13 @@ User adds to `~/.cursor/hooks.json` (user-level) or `<project>/.cursor/hooks.jso
 {
   "version": 1,
   "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "<repo-path>/adapters/cursor/bin/capture-prompt.sh",
+        "timeout": 1,
+        "failClosed": false
+      }
+    ],
     "beforeShellExecution": [
       {
         "command": "<repo-path>/adapters/cursor/bin/classify-shell.sh",
@@ -126,6 +196,7 @@ User adds to `~/.cursor/hooks.json` (user-level) or `<project>/.cursor/hooks.jso
     ],
     "preToolUse": [
       {
+        "_comment": "Edit|Write only — Read is handled by beforeReadFile, Shell by beforeShellExecution. Do not widen.",
         "command": "<repo-path>/adapters/cursor/bin/classify-file.sh",
         "matcher": "Edit|Write",
         "timeout": 2,
@@ -136,18 +207,35 @@ User adds to `~/.cursor/hooks.json` (user-level) or `<project>/.cursor/hooks.jso
 }
 ```
 
-`failClosed: true` for shell because that's the high-stakes path. The file classifier is fail-open by default (parity with the Claude Code adapter).
+`failClosed: true` for shell because that's the high-stakes path. The file classifier and prompt-capture are fail-open (parity with the Claude Code adapter, and the prompt-capture has no security implications if it fails).
 
 API keys live in `~/.io-auto-mode/.env` (same convention as the Claude Code adapter).
+
+### Prompt cache layout
+
+```
+~/.io-auto-mode/
+├── .env                     # user's API keys
+├── config.json              # zone config
+├── auto-mode-log.jsonl      # decision log
+└── cache/
+    └── cursor-prompts/
+        └── <conversation_id>.json   # latest user prompt per conversation
+```
+
+Cache files are small (~1-10KB each). v0.1.x has no automatic cleanup; users can `rm -rf ~/.io-auto-mode/cache/` if it grows. Backlog item: TTL-based cleanup (lazy, on-write) once we have data on size growth.
 
 ---
 
 ## 5. Build pipeline
 
-Extend `scripts/build.mjs` with a `cursor` target. Two `esbuild.build()` calls mirroring the Claude Code adapter:
+Extend `scripts/build.mjs` with a `cursor` target. Three `esbuild.build()` calls mirroring the Claude Code adapter:
 
 - `adapters/cursor/src/hook.ts` → `adapters/cursor/dist/hook.js`
 - `adapters/cursor/src/file-hook.ts` → `adapters/cursor/dist/file-hook.js`
+- `adapters/cursor/src/prompt-hook.ts` → `adapters/cursor/dist/prompt-hook.js`
+
+`prompt-store.ts` is a shared module imported by both `hook.ts` and `prompt-hook.ts`; it gets bundled into both outputs (esbuild handles this transparently).
 
 Output paths get `adapters/cursor/dist/` added to `.gitignore` (same pattern as the Claude Code adapter's `dist/`).
 
@@ -155,15 +243,19 @@ Output paths get `adapters/cursor/dist/` added to `.gitignore` (same pattern as 
 
 ## 6. Tests
 
-`tests/cursor-hook.test.ts` — pure schema-mapping tests, since the heavy lifting (classifier pipeline, zone matching) is already covered by Tier 1:
+`tests/cursor-hook.test.ts` — pure schema-mapping + cache tests:
 
-- **Input parsing:** `beforeShellExecution` JSON → core args; `beforeReadFile` JSON → file-hook args; `preToolUse` JSON → file-hook args (with `tool_name` routing).
-- **Output mapping:** core `allow|block|ask` → Cursor `{permission, user_message, agent_message}`.
-- **Matcher routing:** `preToolUse` with `tool_name ∈ {Edit, Write}` hits file-hook; other tool names allow-through silently.
-- **Transcript path:** `transcript_path` env var resolved correctly; missing path degrades gracefully to empty context.
-- **Sandbox flag:** `sandbox: true` propagates to `isMainSession: false`.
+- **`beforeSubmitPrompt` parsing** — JSON in → cache file written with correct path + content.
+- **Prompt cache write+read round-trip** — atomic-rename works, missing-file degrades gracefully, malformed cache file degrades gracefully.
+- **`beforeShellExecution` parsing** — JSON in → core args (with cached prompt loaded if present).
+- **`beforeReadFile` parsing** — JSON in → file-hook args.
+- **`preToolUse` routing** — `tool_name ∈ {Edit, Write}` hits file-hook; `tool_name = Task` allow-throughs silently; missing `tool_name` allow-throughs.
+- **Output mapping (shell + preToolUse):** core `allow|block|ask` → Cursor `{permission, user_message, agent_message}`.
+- **Output mapping (beforeReadFile):** core `ask` collapses to Cursor `deny` (must-fix #1).
+- **Sandbox flag:** `sandbox: true` propagates to `isMainSession: false`; `sandbox: false` to `isMainSession: true`.
+- **Identity fields in log:** when adapter writes a log entry, `conversation_id`, `cursor_version`, `workspace_roots`, `user_email` are present.
 
-Target: ~30-50 test cases. Picked up automatically by the existing `tsx --test tests/*.test.ts` glob.
+Target: ~50-70 test cases. Picked up automatically by the existing `tsx --test tests/*.test.ts` glob.
 
 ---
 
@@ -173,18 +265,19 @@ Add `## Cursor` section between `## Claude Code` and `## OpenClaw`. Mirror the C
 
 1. **Step 1: Clone, install, build** (same as Claude Code).
 2. **Step 2: Provide your API key** (same `~/.io-auto-mode/.env`).
-3. **Step 3: Wire the hooks into `~/.cursor/hooks.json`** (full snippet from §4 above).
-4. **Step 4: Restart Cursor** (note: hot-reload may pick up changes without restart, but document the safe option).
-5. **Step 5: Verify** (`tail -f ~/.io-auto-mode/auto-mode-log.jsonl`, run a test command, see entries land).
-6. **Optional: Tab hook setup** (forward-reference to a v0.2 follow-up).
+3. **Step 3: Wire the four hooks into `~/.cursor/hooks.json`** (full snippet from §4 above; emphasise that all four are needed for full coverage — `beforeSubmitPrompt` is what gives Stage 2 conversation context for prompt-injection hardening).
+4. **Step 4: Restart Cursor** (note hot-reload behaviour — verify during smoke test, document the truthful path).
+5. **Step 5: Verify** (`tail -f ~/.io-auto-mode/auto-mode-log.jsonl`, run a test command, see entries land with `conversation_id` populated).
+6. **Optional: Tab hook setup** (forward-reference to a v0.2 follow-up; note that Tab hooks don't support `ask`, same constraint as `beforeReadFile`).
 
 ---
 
 ## 8. README updates
 
-- File tree: add `adapters/cursor/   Cursor hooks adapter (Agent: shell + file)`.
+- File tree: add `adapters/cursor/   Cursor hooks adapter (Agent: prompt + shell + file)`.
 - Add `## Quick start (Cursor)` sibling to OpenClaw + Claude Code quick starts.
-- Roadmap: change `[ ] Cursor adapter` → `[x] Cursor adapter (beforeShellExecution + beforeReadFile + preToolUse)`.
+- Roadmap: change `[ ] Cursor adapter` → `[x] Cursor adapter (beforeSubmitPrompt + beforeShellExecution + beforeReadFile + preToolUse)`.
+- "How it works" section: add a one-liner noting that on Cursor, `beforeSubmitPrompt` provides the conversation context that `transcript_path` provides on Claude Code. Same prompt-injection-hardening guarantee, different mechanism.
 - Tagline / repo description: re-include "Cursor" once the adapter ships.
 
 ---
@@ -193,44 +286,50 @@ Add `## Cursor` section between `## Claude Code` and `## OpenClaw`. Mirror the C
 
 | Phase | Scope | Est. |
 |---|---|---|
-| 1 | `adapters/cursor/src/` — three TypeScript files mirroring claude-code | 1h |
-| 2 | `adapters/cursor/bin/` wrapper scripts; build pipeline integration | 30m |
-| 3 | `tests/cursor-hook.test.ts` — schema mapping tests | 30m |
+| 1 | `adapters/cursor/src/{hook,file-hook,prompt-hook,prompt-store}.ts` — TypeScript src + bin wrappers | 1.5h |
+| 2 | Build pipeline integration (`scripts/build.mjs` + `.gitignore`) | 15m |
+| 3 | `tests/cursor-hook.test.ts` — schema + cache tests (~50-70 cases) | 45m |
 | 4 | INSTALL.md `## Cursor` section + README updates + roadmap tick | 30m |
-| 5 | Manual smoke test in a real Cursor session if possible; otherwise document as a follow-up TODO | 30m |
+| 5 | Manual smoke test in real Cursor session including hot-reload check; document truthful behaviour | 30m |
 
-**Total:** ~3 hours.
+**Total:** ~3.5 hours.
 
-Recommend three commits:
-1. `feat(cursor): adapter src + bin wrappers` (phase 1-2 minus tests)
-2. `feat(cursor): build pipeline + tests` (phase 2 build + phase 3)
-3. `docs(cursor): INSTALL section + README updates` (phase 4)
+Three commits:
+1. `feat(cursor): adapter src + bin wrappers + prompt store` (phase 1)
+2. `feat(cursor): build pipeline + tests` (phases 2-3)
+3. `docs(cursor): INSTALL section + README updates` (phase 4); smoke test (phase 5) lands in this commit too if findings are documentation-only, otherwise filed as a follow-up.
 
 ---
 
 ## 10. Acceptance criteria
 
-- A Cursor user can copy the hooks.json snippet from INSTALL.md, restart Cursor, and have classifier decisions appear in `~/.io-auto-mode/auto-mode-log.jsonl`.
+- A Cursor user can copy the hooks.json snippet from INSTALL.md, restart Cursor, and have classifier decisions appear in `~/.io-auto-mode/auto-mode-log.jsonl` with `conversation_id` populated.
+- `beforeSubmitPrompt` writes to `~/.io-auto-mode/cache/cursor-prompts/<conversation_id>.json` and `beforeShellExecution` reads it back; Stage 2 sees the user prompt as context.
+- `beforeReadFile` correctly collapses `ask` → `deny` (verifiable by setting up a zone that triggers ask on the file-hook side and watching Cursor get a `deny`).
 - `pnpm test` passes including new cursor-hook tests.
 - `pnpm typecheck` clean.
-- Zero new runtime dependencies; same `core/` classifier, same `~/.io-auto-mode/config.json` zone config (no Cursor-specific config bifurcation).
+- Zero new runtime dependencies; same `core/` classifier, same `~/.io-auto-mode/config.json` zone config.
+- **Hot-reload behaviour smoke-tested**: change `hooks.json`, observe whether next agent action picks up new hooks without restart. Document truthful answer in INSTALL.md (researcher flagged this as a wildcard time-sink).
 - Smoke-tested in at least one real Cursor session, OR a TODO is filed in `BACKLOG.md` with reproduction steps.
 
 ---
 
 ## 11. Out of scope (deferred)
 
-- **`beforeMCPExecution`** — gated on the planned MCP tool classifier (`[ ]` in the roadmap). Cursor's hook surface is ready when we are.
-- **`beforeTabFileRead` / `afterTabFileEdit`** — Tab is autonomous inline completion. Arguably *higher* stakes than Agent (no human in the loop, fires per-keystroke), but doubles the integration surface and the schemas differ (Tab may fire many times per second). Worth a follow-up once we have user feedback on whether Tab coverage is a real ask, and whether the classifier latency budget can absorb that frequency.
+- **`beforeMCPExecution`** — gated on the planned MCP tool classifier (`[ ]` in the roadmap). Cursor's hook surface is ready when we are. Note: payload's `tool_input` is **JSON-stringified**, not an object — the eventual adapter will need to `JSON.parse` before passing to a classifier.
+- **`updated_input` rewriting on `preToolUse`** — Cursor's hook can rewrite the tool input pre-execution (e.g. redact secrets from a file write before it lands). Out of scope for v0.1.x but worth tracking; could be a future security feature ("auto-redact `.env` content from any Write tool call").
+- **`beforeTabFileRead` / `afterTabFileEdit`** — Tab is autonomous inline completion. Arguably *higher* stakes than Agent (no human in the loop, fires per-keystroke), but doubles the integration surface. `beforeTabFileRead` also has the `allow|deny`-only constraint (no `ask`). Worth a follow-up once we have user feedback on whether Tab coverage is a real ask, and whether the classifier latency budget can absorb that frequency.
 - **`subagentStart` / `subagentStop`** — interesting for "audit which subagents fire" but not core to permission classification.
 - **`stop` / `sessionStart` / `sessionEnd`** — lifecycle hooks; nothing for a permission classifier to do here.
 - **Enterprise-distributed configs** — Cursor supports MDM-distributed `hooks.json` at OS-level paths. Out of scope for OSS v0.1.x; relevant if someone deploys io-auto-mode across a fleet.
+- **Prompt-cache TTL cleanup** — cache files accumulate forever in v0.1.x. BACKLOG entry for lazy on-write TTL once we have growth data.
 
 ---
 
 ## 12. Open questions
 
-1. **Hot-reload vs restart.** Cursor's docs imply hooks.json changes might require restart, but it's not explicit. Test both flows and document the truthful path.
-2. **`transcript_path` availability.** Cursor only sets this if transcript logging is enabled in the user's settings. We need to handle "no transcript" gracefully — Stage 1 will run with no conversation context, which means slightly more conservative blocks. Acceptable for v0.1.x; document as a known limitation.
-3. **`failClosed: true` semantics.** Cursor's docs say `failClosed: true` blocks the action on hook failure. Our `core/classifier.ts` already fails closed on every error path (returns `block` or `ask` as appropriate). The Cursor `failClosed` is a belt-and-braces guard for genuine hook-runtime failures (Node crashes, missing dist, etc.). Verify the interaction during the smoke test.
+1. **Hot-reload vs restart.** Cursor's docs imply hooks.json changes might require restart, but it's not explicit. Test both flows during smoke test and document truthfully. Update INSTALL accordingly.
+2. **`transcript_path` availability.** Cursor only sets this if transcript logging is enabled. With `beforeSubmitPrompt` capturing the user prompt anyway, `transcript_path` becomes a nice-to-have (would give us the full back-and-forth) rather than a must. Document as "if available, used for richer context; if not, prompt cache is sufficient".
+3. **`failClosed: true` semantics.** Cursor's docs say `failClosed: true` blocks the action on hook failure. Our `core/classifier.ts` already fails closed on every error path. The Cursor `failClosed` is a belt-and-braces guard for genuine hook-runtime failures (Node crashes, missing dist, etc.). Verify the interaction during smoke test.
 4. **Loop limit.** Cursor's `loop_limit` (default 5) caps how many times an agent can retry after a denial. For Stage 2 ASK, we'd want this set sensibly so the agent doesn't burn through the budget on a single ambiguous command. Default may be fine; revisit after live use.
+5. **Multi-conversation prompt cache.** If a user has many Cursor conversations open in parallel, the cache will have one file per `conversation_id`. Reads are O(1) (direct path lookup), writes are atomic per-file, no contention. Should scale fine; revisit if anyone hits issues.

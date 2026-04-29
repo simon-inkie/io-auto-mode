@@ -61,14 +61,14 @@ Optionally surface a warning if the allowlist has grown very large (e.g. >50 ent
 **Spec:** [`specs/cursor-adapter.md`](./specs/cursor-adapter.md)
 **Context:** Cursor's [hooks system](https://cursor.com/docs/hooks) exposes the same shape we need — `beforeShellExecution`, `beforeReadFile`, `preToolUse` (matched on Edit/Write). Maps cleanly onto our existing core classifier; pure adapter glue, no core changes.
 
-**Scope (per spec, ~3 hours):**
-1. `adapters/cursor/src/{hook,file-hook,read-transcript}.ts` mirroring the Claude Code adapter
-2. `adapters/cursor/bin/{classify-shell,classify-file}.sh` wrapper scripts
+**Scope (per spec v2, ~3.5 hours):**
+1. `adapters/cursor/src/{hook,file-hook,prompt-hook,prompt-store}.ts` — four files including the new prompt cache for `beforeSubmitPrompt` → next-call context bridge (gives Stage 2 prompt-injection-hardening parity with Claude Code)
+2. `adapters/cursor/bin/{classify-shell,classify-file,capture-prompt}.sh` wrapper scripts
 3. Build pipeline integration (`scripts/build.mjs`)
-4. `tests/cursor-hook.test.ts` — schema-mapping tests (~30-50 cases)
+4. `tests/cursor-hook.test.ts` — schema-mapping + cache tests (~50-70 cases)
 5. `INSTALL.md` `## Cursor` section + README updates + roadmap tick
 
-**Out of scope for v0.1.x:** `beforeMCPExecution` (gated on MCP classifier roadmap), Tab hooks (`beforeTabFileRead`, `afterTabFileEdit`), subagent + lifecycle hooks. See spec §11 for full deferred list.
+**Out of scope for v0.1.x:** `beforeMCPExecution` (gated on MCP classifier roadmap; note: payload's `tool_input` is JSON-stringified), Tab hooks (`beforeTabFileRead`, `afterTabFileEdit`; both also `allow|deny`-only), subagent + lifecycle hooks, `updated_input` rewriting, prompt-cache TTL cleanup. See spec §11 for full deferred list.
 
 ---
 
