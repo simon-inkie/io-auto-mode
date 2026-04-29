@@ -1,0 +1,244 @@
+# io-auto-mode
+
+> A hybrid static + LLM exec security classifier for AI coding agents.
+> Stops prompt injection and accidental destruction without making automation impossible.
+
+**Status:** early (`v0.1.0`). OpenClaw and Claude Code adapters both shipping. Claude Code adapter has been in production use for ~2 weeks. Tests are the current gap (next milestone). Looking for feedback from people running agentic dev workflows.
+
+---
+
+> ## ⚠️ Important — please read
+>
+> **This is a security product. Read the source before you trust it with real
+> systems.** It runs in your tool-call hot path. Bugs, misconfigurations,
+> prompt-injection of the classifier itself, model outages — any of these can
+> let through commands that delete data, ship code, or move money.
+>
+> By using `io-auto-mode` you accept that:
+>
+> - It is provided **as-is**, no warranty, no fitness-for-purpose guarantee
+>   (per the [MIT licence](./LICENSE))
+> - You are responsible for understanding what it does and reviewing the
+>   classifier rules + zone config for your environment before relying on it
+> - The author(s) accept **no liability** for damage arising from bugs,
+>   misconfiguration, model failures, or any other cause
+> - This is **not** a substitute for backups, version control, real
+>   least-privilege OS sandboxing, code review, or a human in the loop on
+>   high-stakes actions
+>
+> Treat it as a layer in defence-in-depth, not the only layer.
+
+---
+
+## The problem
+
+Permissioning for AI coding agents is currently binary:
+
+- **Prompt for everything** — annoying, breaks any kind of automation
+- **Allow everything** — yolo mode; one prompt-injection or one misread instruction and you've lost a database
+
+There's no middle path. Static allow / deny lists can't capture the thing that actually matters: **a `git commit` during a coding task is expected; the same command while summarising a PDF is suspicious.** The risk is contextual.
+
+`io-auto-mode` is a permission classifier that evaluates every shell-tool / file-tool call **with the conversation context** before it runs.
+
+---
+
+## How it works
+
+Three layers, fail-closed:
+
+```
+Agent requests tool call
+        │
+        ▼
+┌─── Static Pattern Layer (sub-ms) ───────────────┐
+│  Hard-coded dangerous regex → BLOCK             │
+│  Hard-coded safe regex      → ALLOW             │
+│  Otherwise                  → fall through      │
+└────────────────────┬────────────────────────────┘
+                     │
+                     ▼
+┌─── Stage 1 — Fast LLM (~1s p50) ────────────────┐
+│  Gemini Flash, plain text output                │
+│  Biased toward blocking                         │
+│  ALLOW → proceed                                │
+│  BLOCK → escalate to Stage 2                    │
+└────────────────────┬────────────────────────────┘
+                     │ (only on BLOCK)
+                     ▼
+┌─── Stage 2 — Thinking LLM (~5s p50, blocks only)┐
+│  Gemini w/ thinking, JSON output                │
+│  Chain-of-thought reasoning                     │
+│  Final decision + reason                        │
+└─────────────────────────────────────────────────┘
+```
+
+Plus a separate path-based classifier for `Read` / `Write` / `Edit` tool calls — pure regex, no LLM, sub-millisecond.
+
+### Design principles
+
+- **Fail closed.** Every error case (API failure, parse failure, timeout) returns BLOCK. Never fail open.
+- **Context-aware.** The classifier sees the conversation history. Same command, different risk depending on source and task.
+- **Prompt-injection hardened.** Assistant text is excluded from classifier input — only user turns and tool_use blocks. The model can't craft text that influences its own classification.
+- **Symlink-resolved.** Paths are resolved through `realpathSync()` before pattern-matching, so an attacker can't escape an `allowWrite` zone via a symlink to a credential file.
+- **Fast by default.** Static layer at sub-millisecond, Stage 2 only runs on blocks. The happy path is cheap.
+- **Tamper-resistant.** Dangerous-pattern lists are compiled into code, not loaded from editable files at runtime.
+- **Transparent.** Blocked actions surface a clear reason; allowed actions are silent.
+
+---
+
+## What's in the repo
+
+```
+core/                      Shared classifier logic — no platform deps
+  classifier.ts            Hybrid static + LLM pipeline
+  static-patterns.ts       Hard-coded regex layer
+  transcript.ts            Conversation context extraction
+adapters/
+  openclaw/                OpenClaw plugin (reference impl, working)
+  claude-code/             Claude Code hooks adapter (WIP)
+INSTALL.md                 OpenClaw install + config guide
+```
+
+Small, focused codebase. Single runtime dep (`openclaw`).
+
+---
+
+## Quick start (OpenClaw)
+
+See [`INSTALL.md`](./INSTALL.md) for the full guide. TL;DR:
+
+```bash
+# 1. Register a Gemini key (used by all stages by default)
+openclaw models auth login --provider google --method gemini-api-key
+
+# 2. Add to openclaw.json
+openclaw config patch '{"plugins":{"load":{"paths":["/path/to/io-auto-mode"]},"entries":{"io-auto-mode":{"enabled":true,"config":{"mode":"classify"}}}}}'
+
+# 3. Restart
+openclaw gateway restart
+
+# 4. Watch decisions land
+tail -f ~/.openclaw/workspace/memory/auto-mode-log.jsonl
+```
+
+### Modes
+
+| Mode | Behaviour |
+|---|---|
+| `classify` (default) | Run the three-layer pipeline |
+| `yolo` | Allow everything (development / debugging) |
+| `strict` | Block everything not on the static allowlist |
+
+---
+
+## Configuration
+
+All options under `plugins.entries.io-auto-mode.config`:
+
+| Option | Default | Description |
+|---|---|---|
+| `mode` | `classify` | `classify` / `yolo` / `strict` |
+| `stage1Model` | `google/gemini-2.5-flash` | Fast LLM for Stage 1 |
+| `stage1Fallback` | `google/gemini-2.5-flash` | Stage 1 fallback |
+| `stage2Model` | `google/gemini-2.5-flash` | Thinking LLM for Stage 2 |
+| `stage2Fallback` | `google/gemini-2.5-flash` | Stage 2 fallback |
+| `userAllowPatterns` | `[]` | Extra regex patterns always allowed |
+| `userBlockPatterns` | `[]` | Extra regex patterns always blocked |
+
+Defaults are all-Gemini for cost + latency. Any provider OpenClaw supports
+(Anthropic, OpenAI, etc.) can be swapped in by changing the model strings —
+see [`AI-SDK-MIGRATION-SPEC.md`](./AI-SDK-MIGRATION-SPEC.md) for the planned
+migration to AI SDK that makes this even smoother (Ollama / LM Studio /
+self-hosted included).
+
+For the `Read` / `Write` / `Edit` file-tool classifier, configure `fileZones` (allowRead / allowWrite / deny) in either user-global (`~/.io-auto-mode/config.json`) or per-project (`<project>/.io-auto-mode.json`). Layers merge.
+
+---
+
+## Decision log
+
+Every classification is logged with timestamp, command, stage (static / stage1 / stage2 / error), decision, duration, model used, and chain-of-thought reasoning where applicable:
+
+```
+~/.openclaw/workspace/memory/auto-mode-log.jsonl
+```
+
+Useful both for debugging surprising blocks and for reviewing what your agent has been up to.
+
+---
+
+## Status & roadmap
+
+- [x] OpenClaw adapter (Bash classifier, file-tool classifier)
+- [x] Per-project config overlays
+- [x] Static-layer hardening (top-level critical-dir rule, mid-path glob matching)
+- [x] Claude Code adapter (PreToolUse hooks; in production ~2 weeks, tests pending)
+- [ ] MCP tool classifier — server/tool-name matching
+- [ ] AI SDK migration — provider-agnostic model calls ([spec](./AI-SDK-MIGRATION-SPEC.md))
+- [ ] Tests — current coverage is gap; prioritising static-pattern test coverage first
+
+See [`BACKLOG.md`](./BACKLOG.md) for more.
+
+---
+
+## Why I built it
+
+I started this project because I wanted to give my OpenClaw agent **Io**
+full autonomy without sleepless nights wondering if it was halfway through
+`rm -rf` on my home directory, force-pushing to `main`, or quietly trashing
+a production database because some PDF it was summarising contained an
+instruction it took too literally.
+
+The risk isn't theoretical. Recently a Cursor coding agent — running on
+Claude — [wiped a company's database in nine seconds. The backups went with
+it.](https://www.tomshardware.com/tech-industry/artificial-intelligence/claude-powered-ai-coding-agent-deletes-entire-company-database-in-9-seconds-backups-zapped-after-cursor-tool-powered-by-anthropics-claude-goes-rogue)
+I'd been designing for exactly that failure mode for months — the news just
+confirms why a permission classifier with teeth has to exist before agents
+are trusted with real systems.
+
+The "ask before everything" mode kills automation. "Allow everything" mode
+puts your data one prompt-injection away from gone. There was no middle path
+that understood **context** — that the same `git push` is fine during a
+coding task and suspicious during a PDF summary. So I built one.
+
+Anthropic shipped [their own auto mode](https://www.anthropic.com/engineering/claude-code-auto-mode)
+shortly after I started this. Theirs is a great default for individual
+Claude Code users on Sonnet. Where io-auto-mode is shaped differently:
+
+- **Rules over prompts.** Patterns and file zones are declarative JSON +
+  regex. Diffable, code-reviewable, version-controlled — same shape as any
+  other ops config. We ship our rules through CI alongside the code they
+  protect, which is how the team and our agents share write access to the
+  same systems without sleepless nights.
+- **Multi-platform.** Runs in front of OpenClaw (chat-platform agents) and
+  Claude Code, not just one runtime.
+- **Provider-flexible.** Pick your model per stage — Gemini Flash for the
+  hot path, Anthropic / OpenAI / a local LLM for thinking. AI SDK migration
+  ([spec](./AI-SDK-MIGRATION-SPEC.md)) makes Ollama / LM Studio first-class,
+  which matters for cost and privacy.
+- **File-op classifier.** Separate path-based allow / deny / write zones for
+  `Read` / `Write` / `Edit` tool calls — useful for stopping an agent
+  reading `~/.aws/credentials` or writing outside its project root, without
+  burning an LLM call per file touch.
+
+If you're running agents with hands on real systems and you've been
+white-knuckling through `--dangerously-skip-permissions`, this is for you.
+
+---
+
+## Credits
+
+Built by **Simon Dixon** ([@inkie](https://inkie.ink)) and **Io**, his AI coordinator, starting April 2026. Platform-side implementation by **Doctor Two**, a Claude Code agent specialising in classifier internals and the OpenClaw runtime.
+
+---
+
+## Contributing
+
+Early days. Issues + discussion welcome on GitHub. If you're running an agentic dev workflow and have an opinion about classifier behaviour, drop a note — failure modes from the wild are the most useful input.
+
+---
+
+## License
+
+MIT — see [LICENSE](./LICENSE).

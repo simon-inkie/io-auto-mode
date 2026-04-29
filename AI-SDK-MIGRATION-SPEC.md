@@ -8,7 +8,7 @@
 
 ## 0. Addendum — Anthropic shipped native auto mode (2026-03-24)
 
-Anthropic released [auto mode](https://www.anthropic.com/engineering/claude-code-auto-mode) for Claude Code: Sonnet 4.6 classifies each action, allow/block (no "ask"), hardcoded protected paths, triggers a prompt after 3 consecutive or 20 total blocks. Available on Max/Team now, Enterprise + API "in coming days." This reshapes io-auto-mode's positioning without killing it.
+Anthropic released [auto mode](https://www.anthropic.com/engineering/claude-code-auto-mode) for Claude Code: Sonnet 4.6 classifies each action with allow / block / ask outcomes — blocked actions are returned to the agent for retry rather than surfaced as ask, and ask only escalates to the human after 3 consecutive or 20 total blocks. Trusted-infrastructure paths and other classifier guidance are user-configurable via three "slots" in the classifier prompt. Available on Max / Team now, Enterprise + API "in coming days." This reshapes io-auto-mode's positioning without killing it.
 
 ### Where we still differ (and why the ai-sdk migration now matters *more*)
 
@@ -16,9 +16,9 @@ Anthropic released [auto mode](https://www.anthropic.com/engineering/claude-code
 |---|---|---|
 | **Classifier model** | Sonnet 4.6 (cloud, one model) | Three-tier: static → Stage 1 → Stage 2, any provider per stage |
 | **Local / offline** | ✗ cloud only | ✓ Ollama/LM Studio via ai-sdk (Phase 4 of this spec) |
-| **Platforms** | Claude Code only | Claude Code + **OpenClaw gateway** (Io on WhatsApp/Telegram) |
-| **Outcomes** | allow / block | allow / **ask** / block (ask preserves human judgement for ambiguous cases without forcing Claude to retry) |
-| **Zone config** | opaque "protected paths" | per-project `.io-auto-mode.json`, immutable global deny, read/write zones |
+| **Platforms** | Claude Code only | Claude Code + **OpenClaw gateway** (agents on WhatsApp / Telegram / Slack / etc.) |
+| **Outcomes** | allow / block / ask (ask gated behind retry-budget; agent retries first) | allow / **ask** / block (ask is first-class for ambiguous cases — no retry budget required) |
+| **Zone config** | trusted-infrastructure paths via classifier-prompt slots (prose-shaped) | per-project `.io-auto-mode.json`, immutable global deny, read/write zones (rule-shaped) |
 | **File Read/Write/Edit** | not mentioned in docs (Bash-centric) | path-based classifier with zone inheritance |
 | **Audit trail** | opaque | `~/.io-auto-mode/auto-mode-log.jsonl` — every decision with stage, model, durationMs, reasoning |
 | **Cost control** | Max plan quota | pluggable — route Stage 1 to free local model, Stage 2 to cheap OpenRouter fallback |
@@ -33,7 +33,7 @@ Anthropic released [auto mode](https://www.anthropic.com/engineering/claude-code
 ### What it doesn't touch
 
 1. **Read/Write/Edit path zones** — still uniquely ours; Anthropic's release appears Bash-focused with a small hardcoded protected-paths list.
-2. **OpenClaw gateway** — Io's WhatsApp/Telegram sessions run through OpenClaw, not Claude Code. Native auto mode can't reach them.
+2. **OpenClaw gateway** — chat-platform agents (WhatsApp / Telegram / Slack) run through OpenClaw, not Claude Code. Native auto mode can't reach them.
 3. **Local / private-first classification** — the whole point of the ai-sdk migration.
 4. **"Ask" as a first-class outcome** — native only allow/block. `ask` is valuable for commands that are context-dependent (e.g. destructive commands that are fine in the worktree but not in main).
 5. **Custom allow/block patterns per project** — per-project tuning beyond global zones.
@@ -44,7 +44,7 @@ Once ai-sdk migration lands, consider:
 
 - **Drop the Claude Code Bash classifier as a default** — let Anthropic's auto mode handle it natively. Keep the code-path around (opt-in via env flag) so it's available if someone wants local classification on Claude Code specifically.
 - **Elevate the Read/Write/Edit file classifier** — keep this on permanently; it's the durable differentiator. Consider generalising it beyond io-auto-mode (standalone "file-zones-for-claude-code" could be its own plugin).
-- **Keep the OpenClaw adapter as the primary deployment target** — it's the only platform without native auto mode, and the code here is load-bearing for Io's multi-channel presence.
+- **Keep the OpenClaw adapter as the primary deployment target** — it's the only platform without native auto mode, and the code here is load-bearing for multi-channel agent deployments.
 - **Lean hard into the local-first narrative** — the ai-sdk migration's 20B-on-LM-Studio validation pass (Phase 4) becomes the headline feature, not a nice-to-have.
 
 ### Impact on this spec's phases

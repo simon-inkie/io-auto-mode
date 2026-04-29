@@ -37,3 +37,18 @@ Currently truncates command at 100 chars and reason at 140 chars to stay under 2
 
 ### Periodic allowlist audit
 Optionally surface a warning if the allowlist has grown very large (e.g. >50 entries) — could indicate drift from intended trust decisions.
+
+---
+
+## Platform adapters
+
+### Cursor adapter
+**Priority:** Medium
+**Context:** Cursor is one of the most-used AI coding environments and has been at the centre of recent agent-deletes-production-database incidents. A Cursor plugin/extension that wires `core/classifier.ts` into Cursor's command-execution path would extend io-auto-mode's protection beyond OpenClaw + Claude Code.
+
+**Open questions:**
+1. What hook surface does Cursor expose for intercepting tool / shell calls? Native plugin API, MCP, or process-level shim?
+2. Does Cursor pass conversation context to plugins in a form `buildClassifierInput()` can consume, or does it need an adapter-specific transcript shape?
+3. File-tool zone classifier: does Cursor's file-edit path call out to a hook, or does it write directly?
+
+**Scope sketch:** new `adapters/cursor/` mirroring `adapters/claude-code/`. Reuse `core/` unchanged. Likely 1-2 days once the hook surface is mapped.

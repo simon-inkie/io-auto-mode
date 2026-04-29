@@ -9,8 +9,9 @@ shell command before execution and classifies it as allow / ask / block.
 
 - OpenClaw **2026.4.2+**
 - Node.js 22+
-- At least one configured AI provider (Google Gemini recommended for Stage 1,
-  Anthropic Claude for Stage 2)
+- A Google Gemini API key (defaults use `gemini-2.5-flash` for all stages —
+  fast, cheap, and accurate enough for classification). You can swap providers
+  via config; see Configuration Reference below.
 
 ---
 
@@ -22,15 +23,14 @@ Use `openclaw models auth login` instead. It picks up existing env vars
 automatically and doesn't touch your default model:
 
 ```bash
-# Google / Gemini (recommended for Stage 1 classifier)
+# Google / Gemini (used by default config for all stages)
 openclaw models auth login --provider google --method gemini-api-key
-
-# Anthropic (for Stage 2 / fallback)
-openclaw models auth login --provider anthropic --method apiKey
 ```
 
-Both commands will detect existing env vars (`GEMINI_API_KEY`, `ANTHROPIC_API_KEY`)
-and prompt to confirm. Omit `--set-default` to keep your current default model.
+This will detect an existing `GEMINI_API_KEY` env var and prompt to confirm.
+Omit `--set-default` to keep your current default model. If you'd rather route
+some stages through Anthropic, OpenAI, etc., register those provider keys too
+and set the model strings in config (see Configuration Reference).
 
 ---
 
@@ -49,10 +49,10 @@ Add to `plugins.load.paths` so OpenClaw discovers it on startup:
         "enabled": true,
         "config": {
           "mode": "classify",
-          "stage1Model": "google/gemini-3-flash-preview",
-          "stage1Fallback": "anthropic/claude-haiku-3-5",
-          "stage2Model": "anthropic/claude-sonnet-4-6",
-          "stage2Fallback": "google/gemini-3-flash-preview"
+          "stage1Model": "google/gemini-2.5-flash",
+          "stage1Fallback": "google/gemini-2.5-flash",
+          "stage2Model": "google/gemini-2.5-flash",
+          "stage2Fallback": "google/gemini-2.5-flash"
         }
       }
     }
@@ -99,10 +99,10 @@ All options live under `plugins.entries.io-auto-mode.config`:
 | Option | Default | Description |
 |--------|---------|-------------|
 | `mode` | `classify` | `classify` (normal), `yolo` (allow all), `strict` (block unless on allowlist) |
-| `stage1Model` | `google/gemini-3-flash-preview` | Fast LLM for Stage 1 classification |
-| `stage1Fallback` | `anthropic/claude-haiku-3-5` | Fallback if Stage 1 model unavailable |
-| `stage2Model` | `anthropic/claude-sonnet-4-6` | Thinking LLM for Stage 2 (escalated blocks) |
-| `stage2Fallback` | `google/gemini-3-flash-preview` | Fallback if Stage 2 model unavailable |
+| `stage1Model` | `google/gemini-2.5-flash` | Fast LLM for Stage 1 classification |
+| `stage1Fallback` | `google/gemini-2.5-flash` | Fallback if Stage 1 model unavailable |
+| `stage2Model` | `google/gemini-2.5-flash` | Thinking LLM for Stage 2 (escalated blocks) |
+| `stage2Fallback` | `google/gemini-2.5-flash` | Fallback if Stage 2 model unavailable |
 | `userAllowPatterns` | `[]` | Additional regex patterns to always allow |
 | `userBlockPatterns` | `[]` | Additional regex patterns to always block |
 
@@ -131,12 +131,13 @@ Fix: ensure provider keys are registered (Step 1).
 ### Deadlock — can't run any commands
 Disable the plugin directly in `openclaw.json` (`enabled: false`) and restart:
 ```bash
-# Run this in your terminal (not via Io — she's locked out too!)
+# Run this in your terminal (not via your agent — it's locked out too!)
 python3 -c "
-import json
-with open('/home/simon/.openclaw/openclaw.json') as f: cfg = json.load(f)
+import json, os
+p = os.path.expanduser('~/.openclaw/openclaw.json')
+with open(p) as f: cfg = json.load(f)
 cfg['plugins']['entries']['io-auto-mode']['enabled'] = False
-with open('/home/simon/.openclaw/openclaw.json', 'w') as f: json.dump(cfg, f, indent=2)
+with open(p, 'w') as f: json.dump(cfg, f, indent=2)
 print('disabled')
 " && openclaw gateway restart
 ```
