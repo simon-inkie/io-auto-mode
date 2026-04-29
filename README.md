@@ -127,7 +127,7 @@ tests/                     Tier 1 tests — static patterns + file-hook zones
 INSTALL.md                 Install + config guide for both adapters
 ```
 
-Small, focused codebase. Single runtime dep (`openclaw`).
+Small, focused codebase. Core has no runtime deps. The OpenClaw adapter pulls in `openclaw`; the Claude Code adapter is dep-free.
 
 ---
 

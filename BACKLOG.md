@@ -69,3 +69,23 @@ Optionally surface a warning if the allowlist has grown very large (e.g. >50 ent
 5. `INSTALL.md` `## Cursor` section + README updates + roadmap tick
 
 **Out of scope for v0.1.x:** `beforeMCPExecution` (gated on MCP classifier roadmap), Tab hooks (`beforeTabFileRead`, `afterTabFileEdit`), subagent + lifecycle hooks. See spec §11 for full deferred list.
+
+---
+
+## Packaging
+
+### Move `openclaw` out of root `dependencies`
+**Priority:** Low
+**Context:** Today the root `package.json` declares `openclaw` as a regular dependency, so a Claude-Code-only user (the larger audience) installs it anyway despite never importing it. Only `adapters/openclaw/src/plugin.ts` actually imports the package; `core/` and `adapters/claude-code/` are openclaw-free.
+
+**Options:**
+1. Move `openclaw` to `optionalDependencies` at the root. Pros: `pnpm install --no-optional` skips it; default install still works. Cons: pnpm's optional handling has edge cases with workspaces.
+2. Move it into `adapters/openclaw/package.json` only and treat that adapter as a workspace package the user installs separately.
+3. Document it as a peerDependency users must add when using the OpenClaw adapter.
+
+Recommend (1) for least disruption. Worth doing before AI SDK migration adds more deps and the picture gets messier.
+
+**Acceptance:**
+- A fresh clone followed by `pnpm install` (default flags) for a Claude-Code-only user does not pull in `openclaw`.
+- The OpenClaw adapter still installs cleanly via documented flag (`pnpm install` with optional, or explicit step).
+- README dep line updated to reflect the new shape.
