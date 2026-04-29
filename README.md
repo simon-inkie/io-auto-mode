@@ -3,7 +3,7 @@
 > A hybrid static + LLM exec security classifier for AI coding agents.
 > Stops prompt injection and accidental destruction without making automation impossible.
 
-**Status:** early (`v0.1.0`). OpenClaw and Claude Code adapters both shipping. Claude Code adapter has been in production use for ~2 weeks. Tests are the current gap (next milestone). Looking for feedback from people running agentic dev workflows.
+**Status:** early (`v0.1.0`). OpenClaw and Claude Code adapters both shipping. Claude Code adapter has been in production use for ~2 weeks. Tier 1 tests cover static patterns + file-hook zone matching (157 tests); pipeline-level + transcript tests on the next tier. Looking for feedback from people running agentic dev workflows.
 
 ---
 
@@ -173,10 +173,12 @@ Useful both for debugging surprising blocks and for reviewing what your agent ha
 - [x] OpenClaw adapter (Bash classifier, file-tool classifier)
 - [x] Per-project config overlays
 - [x] Static-layer hardening (top-level critical-dir rule, mid-path glob matching)
-- [x] Claude Code adapter (PreToolUse hooks; in production ~2 weeks, tests pending)
+- [x] Claude Code adapter (PreToolUse hooks; in production ~2 weeks)
+- [x] Tier 1 tests — static patterns + file-hook zone matching (157 tests, `tsx --test`)
+- [x] CI — GitHub Actions running typecheck + tests on every push / PR
+- [ ] Tier 2 tests — full classifier pipeline (mocked LLM) + transcript prompt-injection coverage
 - [ ] MCP tool classifier — server/tool-name matching
 - [ ] AI SDK migration — provider-agnostic model calls ([spec](./AI-SDK-MIGRATION-SPEC.md))
-- [ ] Tests — current coverage is gap; prioritising static-pattern test coverage first
 
 See [`BACKLOG.md`](./BACKLOG.md) for more.
 

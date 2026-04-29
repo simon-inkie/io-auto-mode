@@ -34,7 +34,7 @@ interface HookInput {
   tool_input?: { file_path?: string };
 }
 
-interface FileZones {
+export interface FileZones {
   deny: string[];
   allowRead: string[];
   allowWrite: string[];
@@ -54,7 +54,7 @@ interface HookOutput {
 
 const HOME = homedir();
 
-const DEFAULT_ZONES: FileZones = {
+export const DEFAULT_ZONES: FileZones = {
   deny: [
     "~/.ssh/**",
     "~/.aws/**",
@@ -112,7 +112,7 @@ function loadJsonSafe<T>(path: string): Partial<T> | null {
   }
 }
 
-function mergeZones(base: FileZones, overlay: Partial<FileZones>, immutableDeny: string[]): FileZones {
+export function mergeZones(base: FileZones, overlay: Partial<FileZones>, immutableDeny: string[]): FileZones {
   const deny = immutableDeny; // global deny is NEVER weakened
   const allowRead = dedup([
     ...base.allowRead,
@@ -129,7 +129,7 @@ function dedup(arr: string[]): string[] {
   return [...new Set(arr)];
 }
 
-function loadConfig(projectDir: string): FileZones {
+export function loadConfig(projectDir: string): FileZones {
   // Layer 1: defaults
   let zones: FileZones = { ...DEFAULT_ZONES };
   let immutableDeny = [...DEFAULT_ZONES.deny];
@@ -163,13 +163,13 @@ function loadConfig(projectDir: string): FileZones {
 // Path matching
 // ---------------------------------------------------------------------------
 
-function expandPattern(pattern: string, projectDir: string): string {
+export function expandPattern(pattern: string, projectDir: string): string {
   return pattern
     .replace(/\$\{projectDir\}/g, projectDir)
     .replace(/^~(?=\/|$)/, HOME);
 }
 
-function matchesGlob(filePath: string, pattern: string): boolean {
+export function matchesGlob(filePath: string, pattern: string): boolean {
   const expanded = pattern;
 
   // Exact match
@@ -201,7 +201,7 @@ function matchesGlob(filePath: string, pattern: string): boolean {
   }
 }
 
-function matchesAnyPattern(filePath: string, patterns: string[], projectDir: string): boolean {
+export function matchesAnyPattern(filePath: string, patterns: string[], projectDir: string): boolean {
   for (const pattern of patterns) {
     const expanded = expandPattern(pattern, projectDir);
     if (matchesGlob(filePath, expanded)) return true;
@@ -209,7 +209,7 @@ function matchesAnyPattern(filePath: string, patterns: string[], projectDir: str
   return false;
 }
 
-function normalisePath(rawPath: string): string {
+export function normalisePath(rawPath: string): string {
   // Expand ~ and resolve relative paths
   let resolved = rawPath.replace(/^~(?=\/|$)/, HOME);
   resolved = resolve(resolved);
@@ -228,7 +228,7 @@ function normalisePath(rawPath: string): string {
 // Classification
 // ---------------------------------------------------------------------------
 
-function classify(
+export function classify(
   filePath: string,
   toolName: string,
   projectDir: string,
@@ -322,4 +322,8 @@ async function main() {
   emit(result.decision, result.reason);
 }
 
-main().catch((err) => emit("ask", `unhandled: ${err}`));
+// Only run main() when invoked as the entry point — not when imported by tests
+const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+if (isMainModule) {
+  main().catch((err) => emit("ask", `unhandled: ${err}`));
+}

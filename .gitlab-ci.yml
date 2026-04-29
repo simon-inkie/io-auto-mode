@@ -1,0 +1,29 @@
+image: node:22
+
+stages:
+  - test
+
+variables:
+  PNPM_VERSION: "9"
+
+cache:
+  key:
+    files:
+      - pnpm-lock.yaml
+  paths:
+    - .pnpm-store
+
+before_script:
+  - corepack enable
+  - corepack prepare pnpm@${PNPM_VERSION} --activate
+  - pnpm config set store-dir .pnpm-store
+  - pnpm install --frozen-lockfile
+
+test:
+  stage: test
+  script:
+    - pnpm typecheck
+    - pnpm test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"

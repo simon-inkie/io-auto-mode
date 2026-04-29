@@ -1,10 +1,11 @@
 {
   "name": "io-auto-mode",
   "version": "0.1.0",
-  "description": "Exec security classifier — hybrid static + LLM. Multi-platform: OpenClaw + Claude Code (WIP).",
+  "description": "Exec security classifier — hybrid static + LLM. Multi-platform: OpenClaw + Claude Code.",
   "type": "module",
   "scripts": {
     "benchmark": "tsx benchmarks/runner.ts",
+    "test": "tsx --test tests/*.test.ts",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit"
   },
