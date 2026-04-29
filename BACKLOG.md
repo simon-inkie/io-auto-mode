@@ -44,7 +44,7 @@ Optionally surface a warning if the allowlist has grown very large (e.g. >50 ent
 
 ### Capture token usage in `auto-mode-log.jsonl`
 **Priority:** Medium
-**Context:** Today the log captures `stage`, `decision`, `model`, `durationMs`, and (for Stage 2) `thinking`, but not `inputTokens` / `outputTokens`. That makes cost claims in the README estimative rather than measured. AI SDK migration plans this anyway (`AI-SDK-MIGRATION-SPEC.md` §"Cost telemetry"); pulling it forward as a small standalone change is cheap.
+**Context:** Today the log captures `stage`, `decision`, `model`, `durationMs`, and (for Stage 2) `thinking`, but not `inputTokens` / `outputTokens`. That makes cost claims in the README estimative rather than measured. AI SDK migration plans this anyway (`specs/ai-sdk-migration.md` §"Cost telemetry"); pulling it forward as a small standalone change is cheap.
 
 **Scope:**
 1. Extend `ModelCallFn` return type from `Promise<string>` to `Promise<{ text: string; usage?: { inputTokens: number; outputTokens: number } }>` — additive, no breaking changes if `usage` is optional.
@@ -57,12 +57,15 @@ Optionally surface a warning if the allowlist has grown very large (e.g. >50 ent
 ## Platform adapters
 
 ### Cursor adapter
-**Priority:** Medium
-**Context:** Cursor is one of the most-used AI coding environments and has been at the centre of recent agent-deletes-production-database incidents. A Cursor plugin/extension that wires `core/classifier.ts` into Cursor's command-execution path would extend io-auto-mode's protection beyond OpenClaw + Claude Code.
+**Priority:** High (specced, ready to execute)
+**Spec:** [`specs/cursor-adapter.md`](./specs/cursor-adapter.md)
+**Context:** Cursor's [hooks system](https://cursor.com/docs/hooks) exposes the same shape we need — `beforeShellExecution`, `beforeReadFile`, `preToolUse` (matched on Edit/Write). Maps cleanly onto our existing core classifier; pure adapter glue, no core changes.
 
-**Open questions:**
-1. What hook surface does Cursor expose for intercepting tool / shell calls? Native plugin API, MCP, or process-level shim?
-2. Does Cursor pass conversation context to plugins in a form `buildClassifierInput()` can consume, or does it need an adapter-specific transcript shape?
-3. File-tool zone classifier: does Cursor's file-edit path call out to a hook, or does it write directly?
+**Scope (per spec, ~3 hours):**
+1. `adapters/cursor/src/{hook,file-hook,read-transcript}.ts` mirroring the Claude Code adapter
+2. `adapters/cursor/bin/{classify-shell,classify-file}.sh` wrapper scripts
+3. Build pipeline integration (`scripts/build.mjs`)
+4. `tests/cursor-hook.test.ts` — schema-mapping tests (~30-50 cases)
+5. `INSTALL.md` `## Cursor` section + README updates + roadmap tick
 
-**Scope sketch:** new `adapters/cursor/` mirroring `adapters/claude-code/`. Reuse `core/` unchanged. Likely 1-2 days once the hook surface is mapped.
+**Out of scope for v0.1.x:** `beforeMCPExecution` (gated on MCP classifier roadmap), Tab hooks (`beforeTabFileRead`, `afterTabFileEdit`), subagent + lifecycle hooks. See spec §11 for full deferred list.

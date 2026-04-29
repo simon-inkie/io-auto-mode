@@ -108,7 +108,7 @@ The headline takeaway is the **shape**, not the absolute numbers: ~80% of decisi
 
 At Gemini 2.5 Flash pricing (~$0.30/M input tokens, ~$2.50/M output tokens), a casual session of ~50 tool calls/day costs single-digit pence. A heavy agentic-dev day (300+ tool calls) sits around 20-50p. Most of that is Stage 2 thinking output, which only fires on blocks — so the bill scales with how often the classifier *escalates*, not how often the agent runs commands.
 
-Static-layer hits (~30% of all calls in our usage) are free. Stage 1 is one short LLM call per agent action; Stage 2 is rarer + slightly chunkier. You can swap any stage to a local LLM via config if you want zero cost — see [`AI-SDK-MIGRATION-SPEC.md`](./AI-SDK-MIGRATION-SPEC.md) for the planned Ollama / LM Studio path.
+Static-layer hits (~30% of all calls in our usage) are free. Stage 1 is one short LLM call per agent action; Stage 2 is rarer + slightly chunkier. You can swap any stage to a local LLM via config if you want zero cost — see [`specs/ai-sdk-migration.md`](./specs/ai-sdk-migration.md) for the planned Ollama / LM Studio path.
 
 ---
 
@@ -122,6 +122,7 @@ core/                      Shared classifier logic — no platform deps
 adapters/
   openclaw/                OpenClaw plugin (reference impl)
   claude-code/             Claude Code PreToolUse hooks (Bash + file)
+specs/                     Future-work design specs (cursor adapter, AI SDK migration, ...)
 tests/                     Tier 1 tests — static patterns + file-hook zones
 INSTALL.md                 Install + config guide for both adapters
 ```
@@ -200,7 +201,7 @@ All options under `plugins.entries.io-auto-mode.config`:
 
 Defaults are all-Gemini for cost + latency. Any provider OpenClaw supports
 (Anthropic, OpenAI, etc.) can be swapped in by changing the model strings —
-see [`AI-SDK-MIGRATION-SPEC.md`](./AI-SDK-MIGRATION-SPEC.md) for the planned
+see [`specs/ai-sdk-migration.md`](./specs/ai-sdk-migration.md) for the planned
 migration to AI SDK that makes this even smoother (Ollama / LM Studio /
 self-hosted included).
 
@@ -228,9 +229,10 @@ Useful both for debugging surprising blocks and for reviewing what your agent ha
 - [x] Claude Code adapter (PreToolUse hooks; in production ~2 weeks)
 - [x] Tier 1 tests — static patterns + file-hook zone matching (157 tests, `tsx --test`)
 - [x] CI — GitHub Actions running typecheck + tests on every push / PR
+- [ ] Cursor adapter — Agent shell + file hooks ([spec](./specs/cursor-adapter.md))
 - [ ] Tier 2 tests — full classifier pipeline (mocked LLM) + transcript prompt-injection coverage
 - [ ] MCP tool classifier — server/tool-name matching
-- [ ] AI SDK migration — provider-agnostic model calls ([spec](./AI-SDK-MIGRATION-SPEC.md))
+- [ ] AI SDK migration — provider-agnostic model calls ([spec](./specs/ai-sdk-migration.md))
 
 See [`BACKLOG.md`](./BACKLOG.md) for more.
 
@@ -269,7 +271,7 @@ Claude Code users on Sonnet. Where io-auto-mode is shaped differently:
   Claude Code, not just one runtime.
 - **Provider-flexible.** Pick your model per stage — Gemini Flash for the
   hot path, Anthropic / OpenAI / a local LLM for thinking. AI SDK migration
-  ([spec](./AI-SDK-MIGRATION-SPEC.md)) makes Ollama / LM Studio first-class,
+  ([spec](./specs/ai-sdk-migration.md)) makes Ollama / LM Studio first-class,
   which matters for cost and privacy.
 - **File-op classifier.** Separate path-based allow / deny / write zones for
   `Read` / `Write` / `Edit` tool calls — useful for stopping an agent
