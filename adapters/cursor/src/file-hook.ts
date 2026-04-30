@@ -22,7 +22,7 @@
  * all additive; deny list never weakened).
  */
 
-import { readFileSync, realpathSync, existsSync } from "node:fs";
+import { readFileSync, realpathSync, existsSync, appendFileSync, mkdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
 
@@ -236,13 +236,12 @@ function logFileDecision(
       path: filePath,
       decision,
       reason,
-      conversation_id: conversationId,
+      conversationId,
     });
-    const { appendFileSync, mkdirSync } = require("node:fs");
     mkdirSync(join(HOME, ".io-auto-mode"), { recursive: true });
     appendFileSync(logPath, entry + "\n");
   } catch {
-    // Non-fatal
+    // Non-fatal — keep classification working even if logging dies.
   }
 }
 

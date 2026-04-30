@@ -18,7 +18,7 @@
  *   3. ${projectDir}/.io-auto-mode.json (project-level, additive only)
  */
 
-import { readFileSync, realpathSync, existsSync } from "node:fs";
+import { readFileSync, realpathSync, existsSync, appendFileSync, mkdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
 
@@ -272,16 +272,16 @@ function logFileDecision(
     const entry = JSON.stringify({
       ts: new Date().toISOString(),
       type: "file",
+      adapter: "claude-code",
       tool: toolName,
       path: filePath,
       decision,
       reason,
     });
-    const { appendFileSync, mkdirSync } = require("node:fs");
     mkdirSync(join(HOME, ".io-auto-mode"), { recursive: true });
     appendFileSync(logPath, entry + "\n");
   } catch {
-    // Non-fatal
+    // Non-fatal — keep classification working even if logging dies.
   }
 }
 

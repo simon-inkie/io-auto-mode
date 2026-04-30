@@ -180,7 +180,7 @@ async function main() {
   }
 
   try {
-    logDecision(command, result, "direct");
+    logDecision(command, result, "direct", { adapter: "claude-code" });
   } catch {
     // Log failure is non-fatal; continue with the decision.
   }

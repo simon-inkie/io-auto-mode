@@ -196,7 +196,13 @@ async function main() {
   }
 
   try {
-    logDecision(command, result, "direct");
+    logDecision(command, result, "direct", {
+      adapter: "cursor",
+      conversationId: input.conversation_id,
+      cursorVersion: input.cursor_version,
+      workspaceRoots: input.workspace_roots,
+      userEmail: input.user_email ?? null,
+    });
   } catch {
     // Log failure is non-fatal; continue with the decision.
   }

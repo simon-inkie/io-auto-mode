@@ -121,4 +121,20 @@ export interface LogEntry {
   reason?: string;
   thinking?: string;
   source?: SourceProvenance;
+  // Adapter identity — populated by adapters when logging so audits can
+  // distinguish entries from different runtimes. All fields optional.
+  adapter?: string;
+  conversationId?: string;
+  cursorVersion?: string;
+  workspaceRoots?: string[];
+  userEmail?: string | null;
+}
+
+/** Optional adapter identity fields passed to logDecision. */
+export interface LogIdentity {
+  adapter?: string;
+  conversationId?: string;
+  cursorVersion?: string;
+  workspaceRoots?: string[];
+  userEmail?: string | null;
 }
