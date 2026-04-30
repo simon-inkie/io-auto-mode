@@ -4,6 +4,9 @@ benchmarks/results/
 *.log
 .env
 
+# Per-project Cursor hooks config — leaks absolute /home/<user>/ paths if committed
+.cursor/
+
 # Generated artefacts from scripts/build.mjs
 adapters/claude-code/dist/
 adapters/claude-code/prompts/

@@ -11,7 +11,7 @@
 import { build } from "esbuild";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
-import { rmSync, mkdirSync, existsSync, cpSync } from "fs";
+import { rmSync, mkdirSync, existsSync, cpSync, chmodSync } from "fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -30,6 +30,16 @@ const EXTERNALS = [
   ...NODE_BUILTINS.map((n) => `node:${n}`),
 ];
 
+// Shebang banner so the dist files can act as npm `bin` entries directly.
+// After the build, chmod +x makes them executable.
+const SHEBANG = "#!/usr/bin/env node";
+
+function makeExecutable(...paths) {
+  for (const p of paths) {
+    chmodSync(p, 0o755);
+  }
+}
+
 if (existsSync(DIST)) rmSync(DIST, { recursive: true });
 mkdirSync(DIST, { recursive: true });
 
@@ -44,6 +54,7 @@ await build({
   external: EXTERNALS,
   sourcemap: "inline",
   logLevel: "warning",
+  banner: { js: SHEBANG },
 });
 
 // File classifier (path-based, no LLM)
@@ -57,10 +68,14 @@ await build({
   external: EXTERNALS,
   sourcemap: "inline",
   logLevel: "warning",
+  banner: { js: SHEBANG },
 });
 
 // The core classifier reads prompts via `__dirname/../prompts/system.txt`.
 cpSync(join(ROOT, "prompts"), join(CC_ROOT, "prompts"), { recursive: true });
+
+// Mark the bundled outputs as executable so npm `bin` entries work directly.
+makeExecutable(join(DIST, "hook.js"), join(DIST, "file-hook.js"));
 
 console.log(`[build] claude-code bash hook  → ${DIST}/hook.js`);
 console.log(`[build] claude-code file hook  → ${DIST}/file-hook.js`);
@@ -84,6 +99,7 @@ await build({
   external: EXTERNALS,
   sourcemap: "inline",
   logLevel: "warning",
+  banner: { js: SHEBANG },
 });
 
 // beforeReadFile + preToolUse(Edit|Write) multiplexed handler
@@ -97,6 +113,7 @@ await build({
   external: EXTERNALS,
   sourcemap: "inline",
   logLevel: "warning",
+  banner: { js: SHEBANG },
 });
 
 // beforeSubmitPrompt handler — captures prompt context for next-call use
@@ -110,10 +127,18 @@ await build({
   external: EXTERNALS,
   sourcemap: "inline",
   logLevel: "warning",
+  banner: { js: SHEBANG },
 });
 
 // Cursor adapter shares the same prompts/ as Claude Code
 cpSync(join(ROOT, "prompts"), join(CURSOR_ROOT, "prompts"), { recursive: true });
+
+// Mark cursor outputs executable too — they're published as npm `bin` entries.
+makeExecutable(
+  join(CURSOR_DIST, "hook.js"),
+  join(CURSOR_DIST, "file-hook.js"),
+  join(CURSOR_DIST, "prompt-hook.js"),
+);
 
 console.log(`[build] cursor shell hook     → ${CURSOR_DIST}/hook.js`);
 console.log(`[build] cursor file hook      → ${CURSOR_DIST}/file-hook.js`);
