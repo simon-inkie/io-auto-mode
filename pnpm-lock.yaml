@@ -7,10 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      openclaw:
-        specifier: ^2026.4.2
-        version: 2026.4.2(@napi-rs/canvas@0.1.97)
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -18,6 +14,9 @@ importers:
       esbuild:
         specifier: ^0.28.0
         version: 0.28.0
+      openclaw:
+        specifier: ^2026.4.2
+        version: 2026.4.2(@napi-rs/canvas@0.1.97)
       tsx:
         specifier: ^4.19.0
         version: 4.21.0
