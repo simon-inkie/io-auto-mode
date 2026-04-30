@@ -322,8 +322,16 @@ async function main() {
   emit(result.decision, result.reason);
 }
 
-// Only run main() when invoked as the entry point — not when imported by tests
-const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+// Only run main() when invoked as the entry point — not when imported by tests.
+// Resolve symlinks so this works when invoked via an npm `bin` symlink (where
+// process.argv[1] is the symlink path but import.meta.url resolves to target).
+let mainEntryReal: string;
+try {
+  mainEntryReal = realpathSync(process.argv[1]);
+} catch {
+  mainEntryReal = process.argv[1];
+}
+const isMainModule = import.meta.url === `file://${mainEntryReal}`;
 if (isMainModule) {
   main().catch((err) => emit("ask", `unhandled: ${err}`));
 }

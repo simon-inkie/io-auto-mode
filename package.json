@@ -29,11 +29,11 @@
     "node": ">=22"
   },
   "bin": {
-    "io-auto-mode-cursor-shell": "./adapters/cursor/dist/hook.js",
-    "io-auto-mode-cursor-file": "./adapters/cursor/dist/file-hook.js",
-    "io-auto-mode-cursor-prompt": "./adapters/cursor/dist/prompt-hook.js",
-    "io-auto-mode-cc-shell": "./adapters/claude-code/dist/hook.js",
-    "io-auto-mode-cc-file": "./adapters/claude-code/dist/file-hook.js"
+    "io-auto-mode-cursor-shell": "adapters/cursor/dist/hook.js",
+    "io-auto-mode-cursor-file": "adapters/cursor/dist/file-hook.js",
+    "io-auto-mode-cursor-prompt": "adapters/cursor/dist/prompt-hook.js",
+    "io-auto-mode-cc-shell": "adapters/claude-code/dist/hook.js",
+    "io-auto-mode-cc-file": "adapters/claude-code/dist/file-hook.js"
   },
   "files": [
     "adapters/cursor/dist/",

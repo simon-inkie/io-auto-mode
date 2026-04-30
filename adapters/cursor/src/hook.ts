@@ -227,7 +227,17 @@ async function main() {
   });
 }
 
-const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+// Resolve symlinks so the main-module check works when the file is invoked
+// via an npm `bin` symlink (where process.argv[1] is the symlink path but
+// import.meta.url resolves to the real target).
+import { realpathSync as realpathSyncMain } from "node:fs";
+let mainEntryReal: string;
+try {
+  mainEntryReal = realpathSyncMain(process.argv[1]);
+} catch {
+  mainEntryReal = process.argv[1];
+}
+const isMainModule = import.meta.url === `file://${mainEntryReal}`;
 if (isMainModule) {
   main().catch((err) => failClosed(`unhandled: ${err}`));
 }

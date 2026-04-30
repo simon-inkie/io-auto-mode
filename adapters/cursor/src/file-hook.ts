@@ -349,7 +349,14 @@ async function main() {
   });
 }
 
-const isMainModule = import.meta.url === `file://${process.argv[1]}`;
+// Resolve symlinks for npm `bin` symlink invocation (see hook.ts comment).
+let mainEntryReal: string;
+try {
+  mainEntryReal = realpathSync(process.argv[1]);
+} catch {
+  mainEntryReal = process.argv[1];
+}
+const isMainModule = import.meta.url === `file://${mainEntryReal}`;
 if (isMainModule) {
   main().catch(() => emit({ permission: "allow" }));
 }
