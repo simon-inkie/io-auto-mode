@@ -292,6 +292,14 @@ config; one place to maintain the rules for both runtimes.
 Reference implementation. Plugin loads from source at runtime; no pre-build
 step needed.
 
+> **Note:** `openclaw` is an *optional peer dependency* of `io-auto-mode`.
+> Claude Code and Cursor users get a tiny ~400KB install. To use the
+> OpenClaw adapter, add it to your project explicitly:
+>
+> ```bash
+> pnpm add openclaw      # or npm install openclaw
+> ```
+
 ---
 
 ### Step 1: Register your AI provider key

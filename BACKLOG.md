@@ -73,18 +73,9 @@ Optionally surface a warning if the allowlist has grown very large (e.g. >50 ent
 
 ## Packaging
 
-### Move `openclaw` out of root `dependencies`
-**Priority:** Low
-**Context:** Today the root `package.json` declares `openclaw` as a regular dependency, so a Claude-Code-only user (the larger audience) installs it anyway despite never importing it. Only `adapters/openclaw/src/plugin.ts` actually imports the package; `core/` and `adapters/claude-code/` are openclaw-free.
-
-**Options:**
-1. Move `openclaw` to `optionalDependencies` at the root. Pros: `pnpm install --no-optional` skips it; default install still works. Cons: pnpm's optional handling has edge cases with workspaces.
-2. Move it into `adapters/openclaw/package.json` only and treat that adapter as a workspace package the user installs separately.
-3. Document it as a peerDependency users must add when using the OpenClaw adapter.
-
-Recommend (1) for least disruption. Worth doing before AI SDK migration adds more deps and the picture gets messier.
-
-**Acceptance:**
-- A fresh clone followed by `pnpm install` (default flags) for a Claude-Code-only user does not pull in `openclaw`.
-- The OpenClaw adapter still installs cleanly via documented flag (`pnpm install` with optional, or explicit step).
-- README dep line updated to reflect the new shape.
+### ~~Move `openclaw` out of root `dependencies`~~ ✅ Done
+Resolved 2026-04-30 as part of npm publish prep (commit landing alongside
+this BACKLOG update). `openclaw` moved to `peerDependenciesMeta.openclaw =
+{optional: true}`. Claude-Code/Cursor install footprint dropped from
+**348MB → 404KB** (99.88%). OpenClaw users now `pnpm add openclaw`
+explicitly per the new note in INSTALL.md §OpenClaw.
