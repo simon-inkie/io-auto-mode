@@ -125,6 +125,7 @@ adapters/
   claude-code/             Claude Code PreToolUse hooks (Bash + file)
   cursor/                  Cursor hooks (prompt + shell + file + write/edit)
 specs/                     Future-work design specs (AI SDK migration, ...)
+docs/                      Contributor docs — adapter guide etc.
 tests/                     Tier 1 tests — static patterns + file-hook zones + cursor mappings
 INSTALL.md                 Install + config guide for all three adapters
 ```
@@ -321,6 +322,8 @@ Built by **Simon Dixon** ([@inkie](https://inkie.ink)) and **Io**, his AI coordi
 ## Contributing
 
 Early days. Issues + discussion welcome on GitHub. If you're running an agentic dev workflow and have an opinion about classifier behaviour, drop a note — failure modes from the wild are the most useful input.
+
+**Writing an adapter for a new runtime?** See [`docs/adapter-guide.md`](./docs/adapter-guide.md) — five contracts, ~150 lines of glue, three shipped adapters as worked examples.
 
 ---
 
