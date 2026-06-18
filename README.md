@@ -259,6 +259,16 @@ A ready-to-edit template lives at `adapters/antigravity/hooks/hooks.json`.
 
 Shares the same core classifier, `~/.io-auto-mode/config.json` config, and `~/.io-auto-mode/.env` API keys as the Claude Code and Cursor adapters -- one config to maintain across all runtimes.
 
+**What it catches (illustrative):**
+
+- `rm -rf ~/project`, dropping a prod table, piping an untrusted `curl` into a shell -> **blocked** (destructive / irreversible).
+- `git push --force` to a shared branch -> **blocked or flagged**, depending on your config.
+- `cat README.md`, `npm test`, `ls -la`, scoped builds -> **allowed**.
+
+Exact verdicts come from your `config.json` plus the LLM stage, so they adapt to context rather than a fixed denylist.
+
+**Scope (v1):** the agy adapter gates `run_command` -- the shell surface that skip-permissions mode opens up. File read/write zone classification under agy (as the Claude Code and Cursor adapters do via their file hooks) is on the roadmap; until then, file tools pass through.
+
 ---
 
 ## Configuration
