@@ -1,0 +1,16 @@
+{
+  "_comment": "Example .agents/hooks.json wiring for the io-auto-mode Antigravity classifier. Replace __ADAPTER_ROOT__ with the absolute path to adapters/antigravity/ inside your io-auto-mode clone.",
+  "your-agent-name": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "__ADAPTER_ROOT__/bin/pretooluse-classify.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

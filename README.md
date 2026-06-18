@@ -3,7 +3,7 @@
 > A hybrid static + LLM exec security classifier for AI coding agents.
 > Stops prompt injection and accidental destruction without making automation impossible.
 
-**Status:** early (`v0.1.0`). OpenClaw, Claude Code, and Cursor adapters all shipping. Claude Code adapter has been in production use for ~2 weeks; Cursor adapter is fresh. Tier 1 tests cover static patterns + file-hook zone matching + Cursor schema mappings (190 tests); full pipeline + transcript tests on the next tier. Looking for feedback from people running agentic dev workflows.
+**Status:** early (`v0.1.0`). OpenClaw, Claude Code, Cursor, and Antigravity (agy) adapters all shipping. Claude Code adapter has been in production use for ~2 weeks; Cursor and agy adapters are fresh. Tier 1 tests cover static patterns + file-hook zone matching + Cursor schema mappings (190 tests); full pipeline + transcript tests on the next tier. Looking for feedback from people running agentic dev workflows.
 
 ---
 
@@ -124,10 +124,11 @@ adapters/
   openclaw/                OpenClaw plugin (reference impl)
   claude-code/             Claude Code PreToolUse hooks (Bash + file)
   cursor/                  Cursor hooks (prompt + shell + file + write/edit)
+  antigravity/             Antigravity (agy) PreToolUse classifier hook
 specs/                     Future-work design specs (AI SDK migration, ...)
 docs/                      Contributor docs — adapter guide etc.
-tests/                     Tier 1 tests — static patterns + file-hook zones + cursor mappings
-INSTALL.md                 Install + config guide for all three adapters
+tests/                     Tier 1 tests — static patterns + file-hook zones + cursor/agy mappings
+INSTALL.md                 Install + config guide for all adapters
 ```
 
 Small, focused codebase. Core has no runtime deps. The OpenClaw adapter pulls in `openclaw`; the Claude Code adapter is dep-free.
@@ -211,7 +212,52 @@ echo 'GEMINI_API_KEY=your-key-here' >> ~/.io-auto-mode/.env
 tail -f ~/.io-auto-mode/auto-mode-log.jsonl
 ```
 
-Four hooks total: a Bash classifier (`beforeShellExecution`), a file classifier (`beforeReadFile` + `preToolUse` Edit|Write), and a prompt-capture (`beforeSubmitPrompt`) that gives Stage 2 conversation context for prompt-injection hardening — same guarantee as Claude Code, different mechanism.
+Four hooks total: a Bash classifier (`beforeShellExecution`), a file classifier (`beforeReadFile` + `preToolUse` Edit|Write), and a prompt-capture (`beforeSubmitPrompt`) that gives Stage 2 conversation context for prompt-injection hardening -- same guarantee as Claude Code, different mechanism.
+
+---
+
+## Quick start (Antigravity / agy)
+
+[Antigravity](https://antigravity.dev) (CLI: `agy`) is the non-Anthropic generalist runtime on the team. Its `PreToolUse` hook fires before every tool call; the adapter gates `run_command` through the same three-layer classifier as the Claude Code and Cursor adapters.
+
+**Contract:** the agy hook adapter reads camelCase JSON on **stdin** and emits `{"allowTool": bool}` on **stdout**, exiting 0 on every path (fail-open). `run_command` calls are classified; read-only tools (`view_file`, `list_dir`, `grep_search`, etc.) are always allowed without a classify call.
+
+```bash
+# 1. Clone + install + build the adapter
+git clone https://github.com/simon-inkie/io-auto-mode.git
+cd io-auto-mode
+pnpm install
+node scripts/build.mjs
+
+# 2. Drop your Gemini key where the hook can read it
+mkdir -p ~/.io-auto-mode
+echo 'GEMINI_API_KEY=your-key-here' >> ~/.io-auto-mode/.env
+
+# 3. Wire the PreToolUse hook into your agent's .agents/hooks.json
+#    Replace <repo-path> with the absolute path you cloned to.
+```
+
+```json
+{
+  "your-agent-name": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<repo-path>/adapters/antigravity/bin/pretooluse-classify.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+A ready-to-edit template lives at `adapters/antigravity/hooks/hooks.json`.
+
+Shares the same core classifier, `~/.io-auto-mode/config.json` config, and `~/.io-auto-mode/.env` API keys as the Claude Code and Cursor adapters -- one config to maintain across all runtimes.
 
 ---
 
@@ -258,8 +304,9 @@ Useful both for debugging surprising blocks and for reviewing what your agent ha
 - [x] Static-layer hardening (top-level critical-dir rule, mid-path glob matching)
 - [x] Claude Code adapter (PreToolUse hooks; in production ~2 weeks)
 - [x] Cursor adapter (`beforeSubmitPrompt` + `beforeShellExecution` + `beforeReadFile` + `preToolUse`; prompt-injection-hardening parity with Claude Code)
-- [x] Tier 1 tests — static patterns + file-hook zone matching + Cursor schema mappings (190 tests, `tsx --test`)
-- [x] CI — GitHub Actions running typecheck + tests on every push / PR
+- [x] Antigravity (agy) adapter (`PreToolUse` matcher:* -- `run_command` classifier, read-only-tool passthrough, fail-open)
+- [x] Tier 1 tests -- static patterns + file-hook zone matching + Cursor schema mappings + agy classifier (tsx --test)
+- [x] CI -- GitHub Actions running typecheck + tests on every push / PR
 - [ ] Tier 2 tests — full classifier pipeline (mocked LLM) + transcript prompt-injection coverage
 - [ ] MCP tool classifier — server/tool-name matching
 - [ ] AI SDK migration — provider-agnostic model calls ([spec](./specs/ai-sdk-migration.md))

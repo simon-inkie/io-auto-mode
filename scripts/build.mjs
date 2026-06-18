@@ -19,6 +19,8 @@ const CC_ROOT = join(ROOT, "adapters/claude-code");
 const DIST = join(CC_ROOT, "dist");
 const CURSOR_ROOT = join(ROOT, "adapters/cursor");
 const CURSOR_DIST = join(CURSOR_ROOT, "dist");
+const AGY_ROOT = join(ROOT, "adapters/antigravity");
+const AGY_DIST = join(AGY_ROOT, "dist");
 
 const NODE_BUILTINS = [
   "fs", "fs/promises", "path", "os", "url", "util", "crypto",
@@ -143,3 +145,28 @@ makeExecutable(
 console.log(`[build] cursor shell hook     → ${CURSOR_DIST}/hook.js`);
 console.log(`[build] cursor file hook      → ${CURSOR_DIST}/file-hook.js`);
 console.log(`[build] cursor prompt hook    → ${CURSOR_DIST}/prompt-hook.js`);
+
+// ---------------------------------------------------------------------------
+// Antigravity (agy) adapter
+// ---------------------------------------------------------------------------
+
+if (existsSync(AGY_DIST)) rmSync(AGY_DIST, { recursive: true });
+mkdirSync(AGY_DIST, { recursive: true });
+
+// PreToolUse classifier
+await build({
+  entryPoints: [join(AGY_ROOT, "src/pretooluse-classify.ts")],
+  outfile: join(AGY_DIST, "pretooluse-classify.js"),
+  bundle: true,
+  platform: "node",
+  format: "esm",
+  target: "node22",
+  external: EXTERNALS,
+  sourcemap: "inline",
+  logLevel: "warning",
+  banner: { js: SHEBANG },
+});
+
+makeExecutable(join(AGY_DIST, "pretooluse-classify.js"));
+
+console.log(`[build] agy pretooluse hook   → ${AGY_DIST}/pretooluse-classify.js`);

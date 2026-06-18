@@ -1,7 +1,7 @@
 {
   "name": "io-auto-mode",
   "version": "0.1.0",
-  "description": "Exec security classifier for AI coding agents — hybrid static + LLM. Cursor + Claude Code + OpenClaw.",
+  "description": "Exec security classifier for AI coding agents -- hybrid static + LLM. Cursor + Claude Code + OpenClaw + Antigravity (agy).",
   "type": "module",
   "license": "MIT",
   "author": "Simon Dixon (https://inkie.ink)",
@@ -33,7 +33,8 @@
     "io-auto-mode-cursor-file": "adapters/cursor/dist/file-hook.js",
     "io-auto-mode-cursor-prompt": "adapters/cursor/dist/prompt-hook.js",
     "io-auto-mode-cc-shell": "adapters/claude-code/dist/hook.js",
-    "io-auto-mode-cc-file": "adapters/claude-code/dist/file-hook.js"
+    "io-auto-mode-cc-file": "adapters/claude-code/dist/file-hook.js",
+    "io-auto-mode-agy-pretooluse": "adapters/antigravity/dist/pretooluse-classify.js"
   },
   "files": [
     "adapters/cursor/dist/",
@@ -42,6 +43,10 @@
     "adapters/claude-code/dist/",
     "adapters/claude-code/prompts/",
     "adapters/claude-code/package.json",
+    "adapters/antigravity/dist/",
+    "adapters/antigravity/bin/",
+    "adapters/antigravity/hooks/",
+    "adapters/antigravity/package.json",
     "README.md",
     "LICENSE",
     "INSTALL.md"
