@@ -4,12 +4,14 @@ A hybrid static + LLM exec security classifier for AI coding agents.
 Intercepts every shell command and file-tool call before execution and
 classifies it as allow / ask / block.
 
-Two adapters are supported:
+Four adapters are supported:
 
 - [Claude Code](#claude-code) — `PreToolUse` hooks (Bash + Read/Write/Edit)
+- [Cursor](#cursor) — `beforeShellExecution` + `beforeReadFile` + `preToolUse` + prompt capture
+- [Antigravity (agy)](#antigravity-agy) — `PreToolUse` classifier (`run_command`)
 - [OpenClaw](#openclaw) — `before_tool_call` plugin
 
-Pick whichever runtime you use; both share the same `core/` classifier.
+Pick whichever runtime you use; they all share the same `core/` classifier.
 
 ---
 
@@ -284,6 +286,97 @@ config; one place to maintain the rules for both runtimes.
 - **MCP tool calls not yet classified** — `beforeMCPExecution` is wired up
   on Cursor's side, but our MCP classifier hasn't shipped yet. Tracked in
   the README roadmap.
+
+---
+
+## Antigravity (agy)
+
+[Antigravity](https://antigravity.dev) (CLI: `agy`) fires a `PreToolUse` hook before
+every tool call. The adapter classifies `run_command` through the same `core/`
+classifier as the other runtimes; read-only and agy-internal tools pass straight
+through. The hook reads agy's hook JSON on stdin and emits `{"allowTool": bool}` on
+stdout, exiting 0 on every path (fail-open — a broken classifier never hard-bricks
+the agent).
+
+### Step 1: Clone, install, build
+
+```bash
+git clone https://github.com/simon-inkie/io-auto-mode.git
+cd io-auto-mode
+pnpm install
+node scripts/build.mjs
+```
+
+The build emits `adapters/antigravity/dist/pretooluse-classify.js`. The wrapper at
+`adapters/antigravity/bin/pretooluse-classify.sh` uses it by default and falls back
+to running the TypeScript via `tsx` if you're hacking on the adapter.
+
+### Step 2: Provide your API key
+
+agy hooks run as subprocesses that don't inherit your shell's environment. Drop your
+Gemini key where the hook can read it:
+
+```bash
+mkdir -p ~/.io-auto-mode
+cat > ~/.io-auto-mode/.env <<'EOF'
+GEMINI_API_KEY=your-google-gemini-key-here
+EOF
+chmod 600 ~/.io-auto-mode/.env
+```
+
+Same path the Claude Code and Cursor adapters use. The legacy `~/io-data/.env` is
+also accepted.
+
+### Step 3: Wire the PreToolUse hook into `.agents/hooks.json`
+
+Add the following to your agy project's `.agents/hooks.json`, substituting
+`<repo-path>` for the absolute path you cloned to. A ready-to-edit template lives at
+`adapters/antigravity/hooks/hooks.json`:
+
+```json
+{
+  "your-agent-name": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "<repo-path>/adapters/antigravity/bin/pretooluse-classify.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+If you already have a `PreToolUse` entry, merge — don't overwrite.
+
+### Step 4: Restart your agy session
+
+Hook config is read at session start. Restart `agy`.
+
+### Step 5: Verify
+
+Ask the agent to run a benign command (e.g. `ls`); it proceeds (static-allow patterns
+resolve at sub-millisecond before any LLM call). For each classified `run_command`
+the adapter writes a diagnostic JSON line to **stderr** (`event: classified`, with
+the `decision` + `stage`), so you can confirm it's gating by watching agy's hook
+stderr.
+
+### Scope + known limitations
+
+- **v1 gates `run_command`** — the shell surface that skip-permissions mode opens up.
+  File read/write zone classification under agy (as the Claude Code and Cursor
+  adapters do via their file hooks) is on the roadmap; until then, file tools pass
+  through.
+- **Bool-only result, no native "ask"** — agy's `PreToolUse` result is
+  `{"allowTool": bool}`. The adapter collapses any `ask` decision to **block**
+  (conservative): an escalated command is refused rather than prompted.
+- **Strict unmarshal** — agy parses the result with strict protojson, so the adapter
+  emits *exactly* `{"allowTool": bool}` and nothing else (any extra field makes agy
+  default to allow).
 
 ---
 
